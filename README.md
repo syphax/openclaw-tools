@@ -10,9 +10,10 @@ The main reasons I build my own skills:
 
 Skills added so far:
 
-* Claude Code Bridge:
-* DuckDuckGo Web Search:
-* Wikipedia Search: 
-* Finance Updates: 
+* Claude Code Bridge: Allows OpenClaw to manage Claude Code
+* DuckDuckGo Web Search: Uses DuckDuckGo to search the web
+* Wikipedia Search: Summarizes Wikipedia articles
+* Social Searcher: Searched LinkedIn and Reddit for specific keywords, and summarizes recent activity in specific subreddits
+* Finance Updates: Gives quick stats on specific tickers
 
 
