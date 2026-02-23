@@ -2,6 +2,10 @@ import { chromium } from 'playwright';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as https from 'https';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 interface RedditMonitor {
   sub: string;
@@ -61,15 +65,33 @@ async function searchLinkedIn(keywords: string[]) {
             }
           }
 
-          // Extract URL and ensure it's absolute
+          // Extract specific LinkedIn post URL (Permalink)
           let url = '';
-          const linkEl = el.querySelector('a.app-aware-link, a[href*="/feed/update/"], a[href*="linkedin.com"]') as HTMLAnchorElement;
-          if (linkEl?.href) {
-            url = linkEl.href.startsWith('http') ? linkEl.href : `https://www.linkedin.com${linkEl.href}`;
+          // Look specifically for the timestamp link or the URN link
+          const permalinkSelectors = [
+            'a[href*="urn:li:activity:"]',
+            'a.app-aware-link[href*="/feed/update/"]',
+            'a.update-components-text-view__mention',
+            '.feed-shared-update-v2__control-menu-container a'
+          ];
+
+          for (const selector of permalinkSelectors) {
+            const linkEl = el.querySelector(selector) as HTMLAnchorElement;
+            if (linkEl?.href && linkEl.href.includes('update')) {
+              url = linkEl.href.split('?')[0];
+              break;
+            }
           }
 
-          return { author, content: text, url };
-        }).filter(p => p.content.length > 5);
+          // Extract external article link if present
+          let externalUrl = '';
+          const extLinkEl = el.querySelector('a.update-components-article__link, a.update-components-external-video__link, .feed-shared-external-video__meta a, .feed-shared-article__meta a') as HTMLAnchorElement;
+          if (extLinkEl?.href) {
+            externalUrl = extLinkEl.href;
+          }
+
+          return { author, content: text, url, externalUrl, title: text.substring(0, 50).replace(/\n/g, ' ') + '...' };
+        }).filter(p => p.url && p.content.length > 5);
       });
       
       console.log(`  Found ${posts.length} for "${kw}"`);

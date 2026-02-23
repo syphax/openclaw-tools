@@ -8,6 +8,7 @@
     "start": "node social-searcher.js",
     "search": "tsc && node social-searcher.js"
   },
+  "type": "module",
   "dependencies": {
     "playwright": "^1.40.0"
   },

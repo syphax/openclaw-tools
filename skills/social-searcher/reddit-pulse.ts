@@ -43,17 +43,19 @@ async function getRedditPulse(sub: string, days: number) {
       res.on('end', () => {
         try {
           const json = JSON.parse(body);
-          const posts = (json.data?.children || []).map((c: any) => ({
-            platform: 'reddit',
-            type: 'pulse',
-            title: c.data.title,
-            content: c.data.selftext,
-            author: c.data.author,
-            subreddit: c.data.subreddit,
-            upvotes: c.data.ups,
-            comments_count: c.data.num_comments,
-            url: `https://www.reddit.com${c.data.permalink}`
-          }));
+          const posts = (json.data?.children || [])
+            .filter((c: any) => c.data.subreddit.toLowerCase() === sub.toLowerCase())
+            .map((c: any) => ({
+              platform: 'reddit',
+              type: 'pulse',
+              title: c.data.title,
+              content: c.data.selftext,
+              author: c.data.author,
+              subreddit: c.data.subreddit,
+              upvotes: c.data.ups,
+              comments_count: c.data.num_comments,
+              url: `https://www.reddit.com${c.data.permalink}`
+            }));
           resolve(posts);
         } catch (e) {
           console.error(`  Error parsing r/${sub}:`, e.message);
