@@ -67,19 +67,31 @@ async function searchLinkedIn(keywords: string[]) {
 
           // Extract specific LinkedIn post URL (Permalink)
           let url = '';
-          // Look specifically for the timestamp link or the URN link
-          const permalinkSelectors = [
-            'a[href*="urn:li:activity:"]',
-            'a.app-aware-link[href*="/feed/update/"]',
-            'a.update-components-text-view__mention',
-            '.feed-shared-update-v2__control-menu-container a'
-          ];
+          
+          // Primary: Find activity URN in the outer container's data-urn attribute
+          // LinkedIn posts are often wrapped in divs like <div data-urn="urn:li:activity:7123...">
+          const outerUrn = el.closest('[data-urn]')?.getAttribute('data-urn');
+          if (outerUrn && outerUrn.includes('activity')) {
+             const id = outerUrn.split(':').pop();
+             url = `https://www.linkedin.com/feed/update/urn:li:activity:${id}/`;
+          }
 
-          for (const selector of permalinkSelectors) {
-            const linkEl = el.querySelector(selector) as HTMLAnchorElement;
-            if (linkEl?.href && linkEl.href.includes('update')) {
-              url = linkEl.href.split('?')[0];
-              break;
+          if (!url) {
+            // Secondary: Look for the timestamp link or the URN link
+            const permalinkSelectors = [
+              'a[href*="urn:li:activity:"]',
+              'a.app-aware-link[href*="/feed/update/"]',
+              '.update-components-actor__sub-description a',
+              '.feed-shared-update-v2__control-menu-container a'
+            ];
+
+            for (const selector of permalinkSelectors) {
+              const linkEl = el.querySelector(selector) as HTMLAnchorElement;
+              if (linkEl?.href && (linkEl.href.includes('update') || linkEl.href.includes('activity'))) {
+                url = linkEl.href.split('?')[0];
+                if (!url.startsWith('http')) url = 'https://www.linkedin.com' + url;
+                break;
+              }
             }
           }
 

@@ -1,7 +1,7 @@
+import { chromium } from 'playwright';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { execSync } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,28 +23,67 @@ async function loadConfig(): Promise<SportsConfig> {
   return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
 }
 
-function findMatches(teamName: string, html: string) {
+async function scrapeFlashscore(paths: string[]): Promise<string> {
+  console.log('🌍 Launching browser for Flashscore...');
+  const browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext({
+    userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1',
+    viewport: { width: 375, height: 812 },
+    isMobile: true
+  });
+
+  let allContent = '';
+
+  for (const p of paths) {
+    const page = await context.newPage();
+    const url = `https://m.flashscore.com/${p}`;
+    console.log(`  Navigating to ${url}...`);
+    try {
+      await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
+      // Wait for the match list to load
+      await page.waitForSelector('#score-data, .event__match', { timeout: 10000 }).catch(() => {});
+      
+      // Expand sections if they are collapsed? (Flashscore mobile usually shows all)
+      const content = await page.evaluate(() => {
+        // Capture everything in the main container
+        return document.querySelector('#score-data')?.innerText || document.body.innerText;
+      });
+      allContent += `\n--- PAGE: ${url} ---\n` + content;
+    } catch (e: any) {
+      console.error(`  Error scraping ${url}:`, e.message);
+    }
+    await page.close();
+  }
+
+  await browser.close();
+  return allContent;
+}
+
+function parseMatches(teamName: string, text: string) {
   const matches: any[] = [];
-  
-  // Flashscore mobile puts match data in lines or spans. 
-  // Let's replace common tag endings with newlines to help splitting.
-  const text = html.replace(/<\/span>|<\/h4>|<br \/>/g, '\n').replace(/<[^>]*>?/gm, ' ');
   const lines = text.split('\n');
   
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
     if (line.toLowerCase().includes(teamName.toLowerCase())) {
-      const cleanLine = line.replace(/\s+/g, ' ').trim();
+      // Flashscore mobile lines usually look like:
+      // [Time/Status] Team A [Score] Team B [Score]
+      // or
+      // [Time] Team A - Team B
       
-      // Look for indicators of a match line
-      if (cleanLine.includes(':') || cleanLine.includes('-:-') || cleanLine.includes("'")) {
-        // Final sanity check: make sure it's not a massive block of garbage
-        if (cleanLine.length < 200) {
-          matches.push({ summary: cleanLine });
-        }
+      // If the team name matches, we take the surrounding lines too for context
+      const start = Math.max(0, i - 1);
+      const end = Math.min(lines.length - 1, i + 1);
+      const chunk = lines.slice(start, end + 1).join(' ').replace(/\s+/g, ' ').trim();
+      
+      if (chunk.length > 5 && (chunk.includes(':') || chunk.includes('-'))) {
+        matches.push({ summary: chunk });
       }
     }
   }
-  return matches;
+  
+  // Deduplicate
+  return Array.from(new Set(matches.map(m => m.summary))).map(s => ({ summary: s }));
 }
 
 async function main() {
@@ -61,21 +100,13 @@ async function main() {
     'hockey/',        // Hockey Today
     'hockey/?d=-1'    // Hockey Yesterday
   ];
-  let allFlashscoreText = '';
-  
-  for (const pathSuffix of sportsPaths) {
-    try {
-      const text = execSync(`curl -sL -A "Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1" "https://m.flashscore.com/${pathSuffix}"`, { encoding: 'utf8' });
-      allFlashscoreText += '\n' + text;
-    } catch (e: any) {
-      console.error(`Failed to fetch Flashscore ${pathSuffix}:`, e.message);
-    }
-  }
+
+  const fullText = await scrapeFlashscore(sportsPaths);
 
   const results = [];
   for (const team of config.teams) {
-    console.log(`🔍 Hunting for ${team.name} across all competitions...`);
-    const matches = findMatches(team.name, allFlashscoreText);
+    console.log(`🔍 Hunting for ${team.name}...`);
+    const matches = parseMatches(team.name, fullText);
     results.push({
       team: team.name,
       sport: team.sport,

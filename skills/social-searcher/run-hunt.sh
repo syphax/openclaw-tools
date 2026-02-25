@@ -38,8 +38,8 @@ if [ ! -f "social-searcher.ts" ]; then
     exit 1
 fi
 
-if [ ! -f "social-search-config.json" ]; then
-    echo "ERROR: social-search-config.json not found" >&2
+if [ ! -f "cfg/social-search-config.json" ]; then
+    echo "ERROR: cfg/social-search-config.json not found" >&2
     exit 1
 fi
 

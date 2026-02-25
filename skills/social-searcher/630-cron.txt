@@ -1,0 +1,5 @@
+# Add this to your crontab (crontab -e) to run the Daily Brief at 6:30 AM EST
+# Note: Ensure paths are correct for your environment. 
+# Also ensures required API Keys are available.
+
+30 6 * * * cd /Users/bcc/Code/git/openclaw-tools/skills/social-searcher && /Users/bcc/.nvm/versions/node/v25.0.0/bin/npm run digest >> /Users/bcc/.openclaw/logs/daily-brief.log 2>&1

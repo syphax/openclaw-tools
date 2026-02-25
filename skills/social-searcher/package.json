@@ -3,17 +3,18 @@
   "version": "1.0.0",
   "description": "LinkedIn and Reddit search tool for tracking keywords and subreddits",
   "main": "social-searcher.js",
+  "type": "module",
   "scripts": {
     "build": "tsc",
-    "start": "node social-searcher.js",
-    "search": "tsc && node social-searcher.js"
+    "search": "tsc && node social-searcher.js",
+    "digest": "npx ts-node --esm daily-digest.ts",
+    "start": "node social-searcher.js"
   },
-  "type": "module",
   "dependencies": {
     "playwright": "^1.40.0"
   },
   "devDependencies": {
-    "@types/node": "^20.10.0",
-    "typescript": "^5.3.0"
+    "typescript": "^5.3.0",
+    "@types/node": "^20.10.0"
   }
 }

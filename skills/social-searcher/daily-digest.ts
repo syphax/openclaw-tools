@@ -39,18 +39,22 @@ async function main() {
     const sportsData = fs.existsSync(sportsFile) ? JSON.parse(fs.readFileSync(sportsFile, 'utf-8')) : [];
 
     // 5. Build JSON Wrapper for AI Synthesis
-    const rawDataSummary = JSON.stringify({
+    const rawDataSummary = {
       date,
-      huntData: huntData.slice(0, 30), 
-      pulseData: pulseData.slice(0, 50), // Increased even more
-      sportsData,
-      formatNote: "IMPORTANT: For Gmail delivery, you MUST use the 'gog gmail send --body-html' tool. Use strict HTML <a> tags for hyperlinks. Markdown [text](url) is NOT allowed in email. EVERY single item (each theme, each hunt match) MUST have at least one link. If a theme is mentioned for a subreddit, you MUST provide the specific [Post] link to a matching thread in the pulseData."
-    }, null, 2);
+      huntData: huntData.slice(0, 40), 
+      pulseData: pulseData.slice(0, 60),
+      sportsData
+    };
 
-    // This file will now be used as evidence for a subagent to write the final digest message
-    fs.writeFileSync(path.join(outputDir, `raw-data-${date}.json`), rawDataSummary);
+    const rawDataPath = path.join(outputDir, `raw-data-${date}.json`);
+    fs.writeFileSync(rawDataPath, JSON.stringify(rawDataSummary, null, 2));
 
-    console.log('🦖 Raw data collected. Ready for Rex to synthesize the daily digest!');
+    console.log('🦖 Raw data collected. Powering up Rex Engine for synthesis...');
+
+    // 6. Run Rex Engine for Synthesis and Delivery
+    execSync('npx ts-node --esm rex-engine.ts', { cwd: __dirname, stdio: 'inherit' });
+
+    console.log('🦖 Daily Digest complete and delivered!');
 
   } catch (error: any) {
     console.error('❌ Failed to generate digest:', error.message);
