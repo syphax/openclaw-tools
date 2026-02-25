@@ -224,6 +224,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Skills
 /skills/social-searcher/cfg/*
 /skills/world-cup-tickets/cfg/*
+/skills/social-searcher/debug/*
 /skills/world-cup-tickets/debug/*

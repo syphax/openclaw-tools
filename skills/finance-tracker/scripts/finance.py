@@ -6,8 +6,21 @@ Finance Tracker - Fetch comprehensive financial data for stocks, ETFs, and crypt
 import sys
 import json
 import os
+import logging
 import subprocess
 from datetime import datetime, timedelta
+
+LOG_DIR = os.path.join(os.path.dirname(__file__), "..", "logs")
+os.makedirs(LOG_DIR, exist_ok=True)
+LOG_FILE = os.path.join(LOG_DIR, "finance.log")
+
+logging.basicConfig(
+    filename=LOG_FILE,
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
 
 def ensure_yfinance():
     """Auto-install yfinance if not available."""
@@ -15,6 +28,7 @@ def ensure_yfinance():
         import yfinance
         return yfinance
     except ImportError:
+        logger.error("yfinance not installed, attempting auto-install")
         print("Installing yfinance...", file=sys.stderr)
         try:
             # Try with --user flag first
@@ -80,11 +94,13 @@ def get_financial_data(symbol, yf):
                 current_price = float(hist['Close'].iloc[-1])
 
         if current_price is None:
+            logger.error("Could not fetch current price for %s", symbol)
             return {"error": f"Could not fetch current price for {symbol}"}
 
         current_price = float(current_price)
 
     except Exception as e:
+        logger.error("Failed to fetch data for %s: %s", symbol, e)
         return {"error": f"Failed to fetch data for {symbol}: {str(e)}"}
 
     # Get historical data
@@ -116,6 +132,7 @@ def get_financial_data(symbol, yf):
         one_year_price = get_price_on_date(ticker, one_year_ago)
 
     except Exception as e:
+        logger.error("Failed to fetch historical data for %s: %s", symbol, e)
         return {"error": f"Failed to fetch historical data: {str(e)}"}
 
     # Calculate changes
@@ -137,6 +154,7 @@ def get_financial_data(symbol, yf):
 
 def main():
     """Main entry point."""
+    logger.info("Script started")
     symbols = [s.upper() for s in sys.argv[1:]]
 
     # If no symbols provided, load defaults from cfg
