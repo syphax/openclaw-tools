@@ -225,3 +225,5 @@ yarn-debug.log*
 yarn-error.log*
 
 /skills/social-searcher/cfg/*
+/skills/world-cup-tickets/cfg/*
+/skills/world-cup-tickets/debug/*

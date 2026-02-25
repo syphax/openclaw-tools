@@ -39,14 +39,17 @@ ${JSON.stringify(rawData, null, 2)}
    - USE HTML <a> tags for Email.
 
 3. **Sports Desk:**
-   - Categorize entries from 'sportsData'.
-   - WIN, LOSS, or DRAW with scores.
-   - Upcoming game times for today.
-   - Collapse inactive teams into: "Quiet Stadium: [Teams]."
+   - Process structured sports data from 'sportsData'.
+   - Each team has 'completed' array (yesterday's results) and 'upcoming' array (today's matches).
+   - For completed matches: Show result (WIN/LOSS/DRAW), opponent, and score. Use format: "🟢 WIN vs [Opponent] ([Score])" or "🔴 LOSS @ [Opponent] ([Score])" or "🟡 DRAW vs [Opponent] ([Score])".
+   - For upcoming matches: Show opponent, location (vs/@), and time. Use format: "📅 Today [Time]: vs/@ [Opponent]".
+   - IMPORTANT: A team is considered ACTIVE if they have ANY completed matches OR ANY upcoming matches. Only collapse teams with BOTH arrays empty.
+   - Collapse truly inactive teams (no completed, no upcoming) into: "🏟️ Quiet Stadium: [Team1], [Team2]."
+   - DO NOT collapse teams that have games - every match matters!
 
 ### FORMATTING:
 - Produce TWO versions:
-  - **VERSION_EMAIL**: Strict HTML. Use <a> tags for ALL links. No Markdown.
+  - **VERSION_EMAIL**: Strict HTML. ALL links MUST be <a> tags. Every single one. No Markdown links.
   - **VERSION_MOBILE**: Clean Markdown for WhatsApp/Telegram.
 
 ### OUTPUT FORMAT:

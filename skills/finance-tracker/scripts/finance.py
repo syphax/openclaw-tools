@@ -5,6 +5,7 @@ Finance Tracker - Fetch comprehensive financial data for stocks, ETFs, and crypt
 
 import sys
 import json
+import os
 import subprocess
 from datetime import datetime, timedelta
 
@@ -23,6 +24,15 @@ def ensure_yfinance():
             subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "--break-system-packages", "yfinance"])
         import yfinance
         return yfinance
+
+def load_default_tickers():
+    """Load default tickers from cfg/tickers.txt."""
+    cfg_path = os.path.join(os.path.dirname(__file__), "..", "cfg", "tickers.txt")
+    cfg_path = os.path.normpath(cfg_path)
+    if not os.path.exists(cfg_path):
+        return []
+    with open(cfg_path) as f:
+        return [line.strip().upper() for line in f if line.strip()]
 
 def get_price_on_date(ticker, target_date):
     """Get closing price for a specific date."""
@@ -54,10 +64,8 @@ def calculate_change_pct(current, previous):
         return None
     return ((current - previous) / previous) * 100
 
-def get_financial_data(symbol):
+def get_financial_data(symbol, yf):
     """Fetch and calculate all financial metrics."""
-    yf = ensure_yfinance()
-
     ticker = yf.Ticker(symbol)
 
     # Get current info
@@ -129,16 +137,30 @@ def get_financial_data(symbol):
 
 def main():
     """Main entry point."""
-    if len(sys.argv) < 2:
-        print(json.dumps({"error": "Usage: finance.py SYMBOL"}))
+    symbols = [s.upper() for s in sys.argv[1:]]
+
+    # If no symbols provided, load defaults from cfg
+    if not symbols:
+        symbols = load_default_tickers()
+
+    if not symbols:
+        print(json.dumps({"error": "Usage: finance.py [SYMBOL ...] (or configure cfg/tickers.txt)"}))
         sys.exit(1)
 
-    symbol = sys.argv[1].upper()
+    yf = ensure_yfinance()
 
-    result = get_financial_data(symbol)
-    print(json.dumps(result, indent=2))
+    results = {}
+    has_error = False
+    for symbol in symbols:
+        data = get_financial_data(symbol, yf)
+        results[symbol] = data
+        if "error" in data:
+            has_error = True
+            print(f"Warning: {data['error']}", file=sys.stderr)
 
-    if "error" in result:
+    print(json.dumps(results, indent=2))
+
+    if has_error:
         sys.exit(1)
 
 if __name__ == "__main__":

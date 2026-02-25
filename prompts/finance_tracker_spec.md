@@ -37,3 +37,9 @@ The script should return a JSON object with:
 ## Final Steps for Agent
 - Make script executable (`chmod +x`).
 - Create the symlink to `~/.openclaw/skills/`.
+
+## UPDATES (Feb 24)
+
+I want to enhance the skills/finance-tracker skill so that we can run the script with multiple tickers; the script will return the JSON as described in SKILL.md, but structured by ticker.
+
+Please update the finance.py script and the SKILL.md. Let's add a cfg folder and in that store a list of default tickers. For starters, this should include: [list of tickers]

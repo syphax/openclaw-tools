@@ -5,21 +5,32 @@ Fetch comprehensive financial data for stocks, ETFs, and cryptocurrencies with h
 ## Usage
 
 ```bash
-finance-tracker SYMBOL
+# Fetch data for specific tickers
+finance-tracker AAPL MSFT QQQ
+
+# Fetch data for all default tickers (from cfg/tickers.txt)
+finance-tracker
 ```
 
 ### Examples
 
 ```bash
-# Stock analysis
+# Single stock
 finance-tracker AAPL
 
-# ETF analysis
-finance-tracker QQQ
+# Multiple ETFs
+finance-tracker VOO QQQ VTI
 
-# Cryptocurrency analysis
-finance-tracker BTC-USD
+# Mix of stocks, ETFs, and crypto
+finance-tracker AAPL QQQ ETH-USD
+
+# All defaults
+finance-tracker
 ```
+
+## Configuration
+
+Default tickers are stored in `cfg/tickers.txt`, one per line. When no tickers are passed as arguments, the script fetches data for all tickers in this file.
 
 ## What it provides
 
@@ -29,7 +40,7 @@ finance-tracker BTC-USD
 
 ## Output
 
-Returns JSON with:
+Returns JSON keyed by ticker symbol. Each entry contains:
 - `symbol`: Ticker symbol
 - `current_price`: Current market price
 - `change_vs_open_pct`: Percentage change from today's open
@@ -39,6 +50,23 @@ Returns JSON with:
 - `three_month_change_pct`: 3-month performance percentage
 - `one_year_change_pct`: 1-year performance percentage
 
+Example:
+```json
+{
+  "AAPL": {
+    "symbol": "AAPL",
+    "current_price": 189.50,
+    "change_vs_open_pct": 0.35,
+    "last_close": 188.25,
+    "last_week_close": 185.00,
+    "last_week_change_pct": 2.43,
+    "three_month_change_pct": 8.12,
+    "one_year_change_pct": 22.50
+  },
+  "QQQ": { ... }
+}
+```
+
 ## Dependencies
 
 The skill automatically installs `yfinance` if not present.
@@ -46,5 +74,6 @@ The skill automatically installs `yfinance` if not present.
 ## Implementation
 
 - **Script**: `scripts/finance.py`
+- **Config**: `cfg/tickers.txt`
 - **Language**: Python 3
 - **API**: Yahoo Finance (via yfinance library)
