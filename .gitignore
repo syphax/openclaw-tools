@@ -229,3 +229,9 @@ yarn-error.log*
 /skills/world-cup-tickets/cfg/*
 /skills/social-searcher/debug/*
 /skills/world-cup-tickets/debug/*
+
+# Data
+*.csv
+skills/world-cup-tickets/ticket-price-history.csv
+skills/world-cup-tickets/logs/daily-415-summary.json
+skills/world-cup-tickets/logs/last-run-status.json
