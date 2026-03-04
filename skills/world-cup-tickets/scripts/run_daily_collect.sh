@@ -3,8 +3,8 @@ set -euo pipefail
 
 BASE_DIR="/Users/bcc/Code/git/openclaw-tools/skills/world-cup-tickets"
 LOG_DIR="$BASE_DIR/logs"
-STATUS_FILE="$LOG_DIR/last-run-status.json"
-RUN_LOG="$LOG_DIR/cron-4am-run.log"
+STATUS_FILE="$LOG_DIR/last-run-status-collect.json"
+RUN_LOG="$LOG_DIR/cron-collect-run.log"
 
 mkdir -p "$LOG_DIR"
 cd "$BASE_DIR"
@@ -13,8 +13,8 @@ start_ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 local_date=$(date +"%Y-%m-%d")
 
 {
-  echo "[$(date +"%Y-%m-%d %H:%M:%S %Z")] Starting 4am world-cup ticket scrape"
-  python3 -c "import runpy; runpy.run_path('scripts/scrape_tickets.py', run_name='__main__')"
+  echo "[$(date +"%Y-%m-%d %H:%M:%S %Z")] Starting FIFA Collect ticket scrape"
+  python3 -c "import runpy; runpy.run_path('scripts/scrape_tickets_collect.py', run_name='__main__')"
   echo "[$(date +"%Y-%m-%d %H:%M:%S %Z")] Scrape completed successfully"
 } >> "$RUN_LOG" 2>&1 && {
   cat > "$STATUS_FILE" <<EOJSON

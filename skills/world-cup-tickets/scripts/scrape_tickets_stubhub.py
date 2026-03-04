@@ -35,13 +35,13 @@ DEBUG_MODE = os.environ.get("DEBUG", "").lower() in ("1", "true", "yes")
 
 logging.basicConfig(
     level=logging.DEBUG if DEBUG_MODE else logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
+    format="%(asctime)s [%(levelname)s] [%(name)s] %(message)s",
     handlers=[
         logging.FileHandler(LOG_PATH),
         logging.StreamHandler(sys.stderr),
     ],
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("scrape_tickets")
 
 
 def ensure_dependencies():
@@ -687,6 +687,10 @@ def run():
     today = datetime.now().strftime("%Y-%m-%d")
 
     all_rows = []
+
+    logger.info("=" * 60)
+    logger.info("SCRIPT: scrape_tickets (StubHub)")
+    logger.info("=" * 60)
 
     if DEBUG_MODE:
         logger.info("=" * 60)
