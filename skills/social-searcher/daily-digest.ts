@@ -17,7 +17,7 @@ async function main() {
 
   const huntFile = path.join(outputDir, `search-results-${date}.json`);
   const pulseFile = path.join(outputDir, `reddit-pulse-${date}.json`);
-  const sportsFile = path.join(outputDir, `sports-results-${date}.json`);
+  const sportsFile = path.join(outputDir, `sports-raw-${date}.json`);
 
   try {
     console.log('🔍 Running Keyword Hunt...');

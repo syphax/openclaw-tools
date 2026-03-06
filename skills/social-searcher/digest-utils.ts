@@ -176,15 +176,15 @@ export function balanceHuntContent(
 }
 
 /**
- * Format WhatsApp links as clean, clickable URLs (not markdown).
- * WhatsApp doesn't render markdown links, so we need plain URLs with labels.
+ * Format WhatsApp links as plain URLs only.
+ * WhatsApp auto-linkifies URLs, so we just return the URL itself.
  *
- * @param text - Text label for the link
+ * @param text - Text label for the link (not used, kept for API compatibility)
  * @param url - URL to link to
  */
 export function formatWhatsAppLink(text: string, url: string): string {
-  // WhatsApp auto-linkifies URLs, so just show: "Label: URL"
-  return `${text}: ${url}`;
+  // WhatsApp auto-linkifies URLs, so just return the URL
+  return url;
 }
 
 /**

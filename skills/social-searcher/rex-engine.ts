@@ -14,10 +14,9 @@ import {
   type LinkedInPost,
 } from './digest-utils.ts';
 import {
-  buildFormattedSportsSection,
-  logSportsStats,
-  type TeamSportsData,
-} from './sports-utils.ts';
+  buildSportsSection,
+  type RawMatch,
+} from './sports-engine.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -116,9 +115,14 @@ function preprocessDigestData(rawData: any): ProcessedDigestData {
 
   // 3. Build sports section deterministically
   console.log('\n⚽ Building sports section...');
-  const sportsData: TeamSportsData[] = rawData.sportsData || [];
-  logSportsStats(sportsData);
-  const sportsSection = buildFormattedSportsSection(sportsData);
+  const sportsRawMatches: RawMatch[] = rawData.sportsData || [];
+  console.log(`  Processing ${sportsRawMatches.length} raw matches...`);
+  const sportsSection = buildSportsSection(sportsRawMatches, date);
+  console.log(`  Results: ${sportsSection.stats.resultsCount} completed, ${sportsSection.stats.upcomingCount} upcoming, ${sportsSection.stats.quietTeamsCount} quiet`);
+  console.log(`  Teams with activity: ${sportsSection.stats.teamsWithActivity.join(', ')}`);
+  if (sportsSection.stats.quietTeams.length > 0) {
+    console.log(`  Quiet teams: ${sportsSection.stats.quietTeams.join(', ')}`);
+  }
 
   return {
     date,
@@ -133,7 +137,7 @@ function preprocessDigestData(rawData: any): ProcessedDigestData {
     sportsSection: {
       email: sportsSection.emailHtml,
       mobile: sportsSection.mobileText,
-      stats: `${sportsData.length} teams tracked`,
+      stats: `${sportsRawMatches.length} raw matches processed`,
     },
   };
 }
@@ -141,13 +145,13 @@ function preprocessDigestData(rawData: any): ProcessedDigestData {
 /**
  * Format the digest for WhatsApp.
  * WhatsApp doesn't support markdown links - it auto-linkifies plain URLs.
- * So we use "Label: URL" format.
+ * So we output plain clickable URLs only (no label prefix).
  */
 function formatForWhatsApp(emailBody: string): string {
-  // Convert HTML links to plain "Label: URL" format
-  // Pattern: <a href="url">text</a> -> text: url
-  return emailBody.replace(/<a href="([^"]+)">([^<]+)<\/a>/g, (_, url, text) => {
-    return formatWhatsAppLink(text, url);
+  // Convert HTML links to plain URLs only
+  // Pattern: <a href="url">text</a> -> url
+  return emailBody.replace(/<a href="([^"]+)">([^<]+)<\/a>/g, (_, url) => {
+    return url; // Just the URL, WhatsApp will auto-linkify
   }).replace(/<br\s*\/?>/g, '\n')
     .replace(/<\/?[^>]+(>|$)/g, ''); // Strip remaining HTML tags
 }
@@ -260,50 +264,49 @@ async function synthesize(rawData: any, processedData: ProcessedDigestData) {
   console.log('\n🤖 Sending to LLM for commentary and synthesis...');
 
   const prompt = `
-You are Rex, an insight-hungry AI curator. Your task is to add COLOR COMMENTARY and SYNTHESIS to a pre-structured Daily Digest for Brian (BCC).
+You are Rex, an insight-hungry AI curator. Your SOLE role is COLOR COMMENTARY on pre-structured content.
 
-IMPORTANT: The structure, selection, and formatting have ALREADY been done by code. Your job is to:
-1. Add insightful commentary and context
-2. Synthesize themes and patterns
-3. Make it engaging and informative
+🚨 CRITICAL: You are NOT responsible for:
+- Structure or formatting (already done deterministically in code)
+- Link formatting (already handled)
+- Section organization (already decided)
+- Item selection (already balanced)
 
-DO NOT re-select items or change the structure. Work with what's provided.
+Your ONLY job is to add INSIGHTFUL COMMENTARY and CONTEXT to existing structure.
 
 ### PRE-PROCESSED DATA:
 ${JSON.stringify(processedData, null, 2)}
 
 ### YOUR TASKS:
 
-1. **Keyword Roundup:**
-   - The items in 'huntData.selected' have been PRE-SELECTED for balance.
-   - For EACH item, write 1-2 sentences of insightful commentary about why it matters.
-   - Format for email: Use HTML <a> tags for links.
+1. **Keyword Roundup (AI Hunt):**
+   - Items in 'huntData.selected' are PRE-SELECTED and PRE-BALANCED.
+   - For EACH item: Write 1-2 sentences explaining WHY it matters to Brian.
+   - Format: Use HTML <a> tags for links.
    - Prefix: [LI] for LinkedIn, [R] for Reddit.
-   - Include: Title, Author/Subreddit, your commentary, and link.
+   - Structure: [Platform] Title by Author/Subreddit - Your commentary. <a href="url">View post</a>
 
 2. **Reddit Pulse:**
-   - The items in 'pulseData.selected' have been PRE-SELECTED for balance.
-   - Synthesize 2-3 thematic "vibes" or trends you see across the discussions.
-   - Reference specific threads with HTML <a> tags.
-   - Focus on WHAT'S HAPPENING and WHY IT MATTERS.
+   - Items in 'pulseData.selected' are PRE-SELECTED and PRE-BALANCED.
+   - Identify 2-3 thematic VIBES or TRENDS across discussions.
+   - Reference specific threads with HTML <a> tags using post titles.
+   - Focus on: WHAT'S HAPPENING and WHY IT MATTERS.
 
 3. **Sports Desk:**
-   - The sports section text is ALREADY FORMATTED in 'sportsSection.email'.
-   - Add a brief (1-2 sentence) intro or headline for context.
-   - DO NOT reformat or restructure - just add your intro.
-   - Keep the pre-formatted results as-is.
+   - The sports text is ALREADY FULLY FORMATTED in 'sportsSection.email'.
+   - Your task: Add ONLY a 1-2 sentence headline/intro for context.
+   - DO NOT touch the pre-formatted results.
+   - DO NOT reformat, restructure, or modify the existing sports text.
+   - Just add your brief intro, then include the full pre-formatted section verbatim.
 
 ### OUTPUT FORMAT:
-Return ONLY a valid JSON object (no markdown, no extra text) with:
+Return ONLY valid JSON (no markdown, no extra text):
 {
-  "email_body": "Full digest in HTML format with your commentary",
-  "commentary_notes": "Brief notes on themes you noticed (for your reference only)"
+  "email_body": "Full digest in HTML with <h2> section headers and your commentary",
+  "commentary_notes": "Brief internal notes on themes (optional)"
 }
 
-The email_body should include:
-- Section headers (use <h2> tags)
-- Your commentary integrated with the data
-- Pre-formatted sports section (verbatim from processedData.sportsSection.email)
+REMINDER: Your role is COMMENTARY ONLY. Structure is handled by code.
 `;
 
   const MAX_RETRIES = 3;
