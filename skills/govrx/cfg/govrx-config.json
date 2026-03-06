@@ -1,0 +1,7 @@
+{
+  "url": "https://trumprx.gov/browse",
+  "csv_file": "data/prescription-drugs.csv",
+  "google_sheet_id": "",
+  "telegram_bot_token": "",
+  "telegram_chat_id": ""
+}

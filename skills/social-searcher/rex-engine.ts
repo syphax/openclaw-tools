@@ -2,6 +2,22 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { spawnSync } from 'child_process';
+import {
+  balanceHuntContent,
+  balanceRedditContent,
+  formatWhatsAppLink,
+  formatTelegramLink,
+  formatEmailLink,
+  generateEmailSubject,
+  logBalanceStats,
+  type RedditPost,
+  type LinkedInPost,
+} from './digest-utils.ts';
+import {
+  buildFormattedSportsSection,
+  logSportsStats,
+  type TeamSportsData,
+} from './sports-utils.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -61,53 +77,151 @@ function writeDeliveryStatus(status: DeliveryStatus) {
   console.log(`🧾 Delivery status written: ${outPath}`);
 }
 
-async function synthesize(rawData: any) {
-  if (!OPENROUTER_API_KEY) {
-    throw new Error('OPENROUTER_API_KEY not found in environment.');
+interface ProcessedDigestData {
+  date: string;
+  huntData: {
+    selected: any[];
+    stats: any;
+  };
+  pulseData: {
+    selected: any[];
+    stats: any;
+  };
+  sportsSection: {
+    email: string;
+    mobile: string;
+    stats: string;
+  };
+}
+
+/**
+ * Pre-process raw data with deterministic balancing and formatting.
+ * This enforces structure BEFORE the LLM sees it, allowing the LLM
+ * to focus on commentary and summarization.
+ */
+function preprocessDigestData(rawData: any): ProcessedDigestData {
+  console.log('\n🔧 Pre-processing digest data with deterministic logic...');
+
+  const date = rawData.date || new Date().toISOString().split('T')[0];
+
+  // 1. Balance hunt data (reduce r/openclaw dominance)
+  console.log('\n📊 Balancing hunt data...');
+  const huntResult = balanceHuntContent(rawData.huntData || [], 10, 3);
+  logBalanceStats('Hunt Content Balance', huntResult);
+
+  // 2. Balance pulse data
+  console.log('\n📊 Balancing pulse data...');
+  const pulseResult = balanceRedditContent(rawData.pulseData || [], 15, 5);
+  logBalanceStats('Pulse Content Balance', pulseResult);
+
+  // 3. Build sports section deterministically
+  console.log('\n⚽ Building sports section...');
+  const sportsData: TeamSportsData[] = rawData.sportsData || [];
+  logSportsStats(sportsData);
+  const sportsSection = buildFormattedSportsSection(sportsData);
+
+  return {
+    date,
+    huntData: {
+      selected: huntResult.selected,
+      stats: huntResult.subCounts,
+    },
+    pulseData: {
+      selected: pulseResult.selected,
+      stats: pulseResult.subCounts,
+    },
+    sportsSection: {
+      email: sportsSection.emailHtml,
+      mobile: sportsSection.mobileText,
+      stats: `${sportsData.length} teams tracked`,
+    },
+  };
+}
+
+/**
+ * Format the digest for WhatsApp.
+ * WhatsApp doesn't support markdown links - it auto-linkifies plain URLs.
+ * So we use "Label: URL" format.
+ */
+function formatForWhatsApp(emailBody: string): string {
+  // Convert HTML links to plain "Label: URL" format
+  // Pattern: <a href="url">text</a> -> text: url
+  return emailBody.replace(/<a href="([^"]+)">([^<]+)<\/a>/g, (_, url, text) => {
+    return formatWhatsAppLink(text, url);
+  }).replace(/<br\s*\/?>/g, '\n')
+    .replace(/<\/?[^>]+(>|$)/g, ''); // Strip remaining HTML tags
+}
+
+/**
+ * Format the digest for Telegram.
+ * Telegram supports markdown-style links.
+ */
+function formatForTelegram(emailBody: string): string {
+  // Convert HTML links to markdown format
+  // Pattern: <a href="url">text</a> -> [text](url)
+  return emailBody.replace(/<a href="([^"]+)">([^<]+)<\/a>/g, (_, url, text) => {
+    return formatTelegramLink(text, url);
+  }).replace(/<br\s*\/?>/g, '\n')
+    .replace(/<\/?[^>]+(>|$)/g, ''); // Strip remaining HTML tags
+}
+
+/**
+ * Extract first valid JSON object from potentially noisy LLM output.
+ * Handles cases where JSON is wrapped in markdown code blocks or has extra text.
+ */
+function extractJsonFromResponse(content: string): any {
+  // Try direct parse first
+  try {
+    return JSON.parse(content);
+  } catch (e) {
+    // Not direct JSON, try to extract
   }
 
-  const prompt = `
-You are Rex, an insight-hungry AI curator. Your task is to synthesize raw social and sports data into a "Daily Digest" for Brian (BCC).
+  // Try to extract from markdown code block
+  const codeBlockMatch = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+  if (codeBlockMatch) {
+    try {
+      return JSON.parse(codeBlockMatch[1]);
+    } catch (e) {
+      // Continue to next strategy
+    }
+  }
 
-### DATA:
-${JSON.stringify(rawData, null, 2)}
+  // Try to find first { to last } block
+  const firstBrace = content.indexOf('{');
+  const lastBrace = content.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    try {
+      return JSON.parse(content.substring(firstBrace, lastBrace + 1));
+    } catch (e) {
+      // Continue to next strategy
+    }
+  }
 
-### SPECIFICATIONS:
-1. **Keyword Roundup:**
-   - Select 8-10 most interesting entries from 'huntData'.
-   - Format: "[LI] (or [R]) **Title** - Author/Subreddit: description. [Link]"
-   - 1-2 sentence description of relevance for each.
-   - For LinkedIn: Author name, Post Link, and Article Link (if provided).
-   - For Reddit: Subreddit name, Post Link.
-   - USE HTML <a> tags for Email (e.g. <a href="url">Post</a>).
-
-2. **Reddit Pulse:**
-   - Synthesize the "Vibe" for each sub in 'pulseData'.
-   - Group into 2-3 distinct "Themes".
-   - Provide links to specific threads [Thread] driving that vibe.
-   - USE HTML <a> tags for Email.
-
-3. **Sports Desk:**
-   - Process structured sports data from 'sportsData'.
-   - Each team has 'completed' array (yesterday's results) and 'upcoming' array (today's matches).
-   - For completed matches: Show result (WIN/LOSS/DRAW), opponent, and score.
-   - For upcoming matches: Show opponent, location (vs/@), and time.
-   - A team is ACTIVE if they have ANY completed OR ANY upcoming matches.
-   - Collapse truly inactive teams into: "🏟️ Quiet Stadium: [Team1], [Team2]."
-
-### FORMATTING:
-- Produce TWO versions:
-  - **VERSION_EMAIL**: Strict HTML. ALL links MUST be <a> tags.
-  - **VERSION_MOBILE**: Clean Markdown for WhatsApp/Telegram.
-
-### OUTPUT FORMAT:
-Return a JSON object:
-{
-  "subject": "🦖 Rex Daily Brief: [Brief Catchy Tagline]",
-  "email_body": "...",
-  "mobile_body": "..."
+  throw new Error('Could not extract valid JSON from response');
 }
-`;
+
+/**
+ * Validate that LLM response contains required fields.
+ */
+function validateLlmResponse(parsed: any): void {
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('LLM response is not an object');
+  }
+
+  if (!parsed.email_body || typeof parsed.email_body !== 'string') {
+    throw new Error('LLM response missing required field: email_body');
+  }
+
+  if (parsed.email_body.trim().length < 50) {
+    throw new Error('LLM response email_body is too short (likely malformed)');
+  }
+
+  console.log('✅ LLM response validation passed');
+}
+
+async function callLlmApi(prompt: string, attemptNum: number): Promise<any> {
+  console.log(`  🔄 LLM API call attempt ${attemptNum}...`);
 
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
@@ -124,15 +238,104 @@ Return a JSON object:
     }),
   });
 
+  if (!response.ok) {
+    throw new Error(`API request failed with status ${response.status}`);
+  }
+
   const result = await response.json();
   const content = result?.choices?.[0]?.message?.content;
-  if (!content) throw new Error('LLM returned empty content.');
 
-  try {
-    return JSON.parse(content);
-  } catch (e: any) {
-    throw new Error(`Invalid JSON from model: ${e.message}`);
+  if (!content) {
+    throw new Error('LLM returned empty content');
   }
+
+  return content;
+}
+
+async function synthesize(rawData: any, processedData: ProcessedDigestData) {
+  if (!OPENROUTER_API_KEY) {
+    throw new Error('OPENROUTER_API_KEY not found in environment.');
+  }
+
+  console.log('\n🤖 Sending to LLM for commentary and synthesis...');
+
+  const prompt = `
+You are Rex, an insight-hungry AI curator. Your task is to add COLOR COMMENTARY and SYNTHESIS to a pre-structured Daily Digest for Brian (BCC).
+
+IMPORTANT: The structure, selection, and formatting have ALREADY been done by code. Your job is to:
+1. Add insightful commentary and context
+2. Synthesize themes and patterns
+3. Make it engaging and informative
+
+DO NOT re-select items or change the structure. Work with what's provided.
+
+### PRE-PROCESSED DATA:
+${JSON.stringify(processedData, null, 2)}
+
+### YOUR TASKS:
+
+1. **Keyword Roundup:**
+   - The items in 'huntData.selected' have been PRE-SELECTED for balance.
+   - For EACH item, write 1-2 sentences of insightful commentary about why it matters.
+   - Format for email: Use HTML <a> tags for links.
+   - Prefix: [LI] for LinkedIn, [R] for Reddit.
+   - Include: Title, Author/Subreddit, your commentary, and link.
+
+2. **Reddit Pulse:**
+   - The items in 'pulseData.selected' have been PRE-SELECTED for balance.
+   - Synthesize 2-3 thematic "vibes" or trends you see across the discussions.
+   - Reference specific threads with HTML <a> tags.
+   - Focus on WHAT'S HAPPENING and WHY IT MATTERS.
+
+3. **Sports Desk:**
+   - The sports section text is ALREADY FORMATTED in 'sportsSection.email'.
+   - Add a brief (1-2 sentence) intro or headline for context.
+   - DO NOT reformat or restructure - just add your intro.
+   - Keep the pre-formatted results as-is.
+
+### OUTPUT FORMAT:
+Return ONLY a valid JSON object (no markdown, no extra text) with:
+{
+  "email_body": "Full digest in HTML format with your commentary",
+  "commentary_notes": "Brief notes on themes you noticed (for your reference only)"
+}
+
+The email_body should include:
+- Section headers (use <h2> tags)
+- Your commentary integrated with the data
+- Pre-formatted sports section (verbatim from processedData.sportsSection.email)
+`;
+
+  const MAX_RETRIES = 3;
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const content = await callLlmApi(prompt, attempt);
+
+      // Try to parse and validate
+      const parsed = extractJsonFromResponse(content);
+      validateLlmResponse(parsed);
+
+      console.log('✅ LLM synthesis complete and validated');
+      return parsed;
+
+    } catch (e: any) {
+      lastError = e;
+      console.warn(`  ⚠️  Attempt ${attempt} failed: ${e.message}`);
+
+      if (attempt < MAX_RETRIES) {
+        const delay = 1000 * attempt; // Exponential backoff: 1s, 2s, 3s
+        console.log(`  ⏳ Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  // All retries exhausted
+  throw new Error(
+    `LLM synthesis failed after ${MAX_RETRIES} attempts. Last error: ${lastError?.message || 'unknown'}`
+  );
 }
 
 function runOpenclawMessage(channel: 'whatsapp' | 'telegram', target: string, body: string): ChannelStatus {
@@ -195,19 +398,7 @@ function deliverEmail(subject: string, htmlBody: string): ChannelStatus {
   return status;
 }
 
-function deliverMobile(body: string) {
-  console.log('📱 Delivering Mobile Brief...');
-  const whatsapp = runOpenclawMessage('whatsapp', addressCfg.phoneWhatsapp, body);
-  const telegram = runOpenclawMessage('telegram', addressCfg.telegramChatId, body);
-
-  if (whatsapp.ok) console.log('  ✅ whatsapp message sent.');
-  else console.error('  ❌ whatsapp delivery failed:', whatsapp.stderr || whatsapp.error);
-
-  if (telegram.ok) console.log('  ✅ telegram message sent.');
-  else console.error('  ❌ telegram delivery failed:', telegram.stderr || telegram.error);
-
-  return { whatsapp, telegram };
-}
+// Removed deliverMobile function - now handled in main() with separate formatting
 
 async function main() {
   const date = new Date().toISOString().split('T')[0];
@@ -228,24 +419,61 @@ async function main() {
       throw new Error(`Missing raw data for ${date}. Run daily-digest.ts first.`);
     }
 
-    console.log(`🦖 Rex Engine starting for ${date}...`);
+    console.log(`\n🦖 Rex Engine starting for ${date}...`);
     const rawData = JSON.parse(fs.readFileSync(rawDataPath, 'utf-8'));
 
-    const digest = await synthesize(rawData);
-    status.synthesize = { ok: true };
-    console.log('✨ Synthesis complete.');
+    // Step 1: Pre-process with deterministic logic
+    const processedData = preprocessDigestData(rawData);
 
-    status.email = deliverEmail(digest.subject, digest.email_body);
+    // Step 2: LLM adds commentary
+    const llmResult = await synthesize(rawData, processedData);
+    status.synthesize = { ok: true };
+
+    // Step 3: Generate email subject with enforced format
+    const emailSubject = generateEmailSubject(date);
+    console.log(`📧 Email subject: ${emailSubject}`);
+
+    // Step 4: Format for different channels
+    const emailBody = llmResult.email_body;
+    const whatsappBody = formatForWhatsApp(emailBody);
+    const telegramBody = formatForTelegram(emailBody);
+
+    console.log('\n📝 Content formatted for all channels.');
+
+    // Step 5: Deliver email first
+    status.email = deliverEmail(emailSubject, emailBody);
+
+    // Only proceed to mobile if email succeeded
+    if (status.email.ok) {
+      console.log('\n📱 Email succeeded, proceeding to mobile delivery...');
+
+      const whatsappStatus = runOpenclawMessage('whatsapp', addressCfg.phoneWhatsapp, whatsappBody);
+      const telegramStatus = runOpenclawMessage('telegram', addressCfg.telegramChatId, telegramBody);
+
+      if (whatsappStatus.ok) console.log('  ✅ WhatsApp message sent.');
+      else console.error('  ❌ WhatsApp delivery failed:', whatsappStatus.stderr || whatsappStatus.error);
+
+      if (telegramStatus.ok) console.log('  ✅ Telegram message sent.');
+      else console.error('  ❌ Telegram delivery failed:', telegramStatus.stderr || telegramStatus.error);
+
+      status.mobile = { whatsapp: whatsappStatus, telegram: telegramStatus };
+    } else {
+      console.error('\n❌ Email delivery failed, skipping mobile delivery.');
+      status.mobile = {
+        whatsapp: { ok: false, error: 'Skipped due to email failure' },
+        telegram: { ok: false, error: 'Skipped due to email failure' },
+      };
+    }
+
+    status.overallOk = status.synthesize.ok && status.email.ok;
+    writeDeliveryStatus(status);
+
     if (!status.email.ok) {
-      status.mobile = deliverMobile(digest.mobile_body);
-      status.overallOk = false;
-      writeDeliveryStatus(status);
+      console.error('\n❌ Email delivery failed. Failing hard.');
       process.exit(1);
     }
 
-    status.mobile = deliverMobile(digest.mobile_body);
-    status.overallOk = status.synthesize.ok && status.email.ok;
-    writeDeliveryStatus(status);
+    console.log('\n🦖 Daily Digest complete and delivered!');
     process.exit(0);
   } catch (error: any) {
     console.error('❌ Synthesis/Delivery failed:', error.message);

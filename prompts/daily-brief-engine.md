@@ -50,3 +50,51 @@ Information about sites, keywords, subreddits, sports teams, etc. are stored in 
 
 * Email subject should be: 🦖 Rex Daily Brief: [Date]
 * The Reddit pulse links should be listed as bullets under each entry with the post title as the link text, instead of a list of links that all say "Thread"
+
+## Addendum #2 (March 5, 2026)
+
+### News balance
+
+Currently, r/openclaw seems to dominate the keyword and Reddit pulse results. While this is likely a function of activity and voting in this subreddit, I don't want any single subreddit to dominate the results. 
+
+### Links
+
+The links in the WhatsApp version are not clean. They look like markdown format- [text](URL), but in the message I see those literals, and not a clickable link that says 'text'.
+
+The Telegram links are A-OK.
+
+Links generally are OK in the email version.
+
+### Email title
+
+For awhile, the email subject text obeyed the format above (🦖 Rex Daily Brief: [Date]), but that stopped after March 2nd. I prefer that format over a descriptive title.
+
+### Sports update
+
+Sports wrap-up: Currently, we have duplicates. inconsistent display of results, and some confusion about who the Celtics are (one update mentioned an upcoming game against Aberdeem, clearly referring to the Scottish football club Celtic).
+
+Here's what I'd like:
+
+* A section with results for the past 3 days, for all teams identified in the config file.
+   * Label results as clear **WIN, LOSS, or DRAW**. 
+    * Include Scores (e.g., 114-106).
+
+* A section with upcoming games
+    * List **Upcoming Times** for games scheduled for the day of the digest, and for the next 2 days (so: today, tomorrow, and the day after that)
+
+* A brief list of the teams with no activity. 
+
+I like this format (from the Feb 23 digest). Note that this example doesn't happen to have any upcoming games.
+
+⚽ SPORTS DESK
+
+CELTICS: WIN 🟢 (111-89 vs Lakers). Jaylen Brown handling business in LA. ☘️
+RED SOX: WIN 🟢 (11-10 vs Blue Jays). ⚾️ High-scoring spring training win from yesterday.
+SUNDERLAND: LOSS 🔴 (1-3 vs Fulham).
+
+Quiet Stadium: Borussia Dortmund, Wrexham, and the Bruins had no active games yesterday.
+
+### Implementation
+
+Wherever possible, please encode specified functionality in code- Python or Typescript or whatever language is most suitable. This promotes consistency. At run-time, I'd like the LLM to focus on summarizing the news content. Section structure, link formation, etc. should be handled by code as much as possible. The LLM should focus on "color commentary."
+

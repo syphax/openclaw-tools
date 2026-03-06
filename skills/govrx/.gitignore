@@ -1,0 +1,37 @@
+# Logs
+logs/*.log
+*.log
+
+# Data files
+data/*.csv
+
+# Google credentials
+cfg/google-service-account.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Playwright
+.playwright/
+
+# Backup files
+*.backup
+*.bak
