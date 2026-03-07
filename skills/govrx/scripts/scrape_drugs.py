@@ -8,6 +8,7 @@ import csv
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 import time
@@ -48,7 +49,6 @@ def ensure_dependencies():
         config = load_config()
         if config.get("google_sheet_id"):
             deps["gspread"] = "gspread"
-            deps["oauth2client"] = "oauth2client"
     except Exception:
         # Config might not exist on first run
         pass
@@ -93,6 +93,21 @@ def load_config():
         sys.exit(1)
 
 
+def parse_price(price_str):
+    """Extract a clean numeric price string (e.g. '1349.02') from a raw price string."""
+    if not price_str:
+        return None
+    # Take only the part before · (e.g. "$1,349.02  ·  89% off" → "$1,349.02")
+    price_part = price_str.split('·')[0]
+    match = re.search(r'[\d,]+(?:\.\d+)?', price_part)
+    if not match:
+        return None
+    try:
+        return f"{float(match.group(0).replace(',', '')):.2f}"
+    except ValueError:
+        return None
+
+
 def scrape_drug_data(url):
     """
     Scrape drug price data from the website using Playwright.
@@ -134,82 +149,63 @@ def scrape_drug_data(url):
 
             for link in drug_links:
                 try:
-                    # Get the drug name from the link text or nearby text
-                    drug_name = None
+                    href = link.get_attribute('href') or ''
+                    if not href.startswith('/p/'):
+                        continue
 
-                    # Try to get text from the link itself or parent element
-                    parent = link.evaluate_handle("el => el.closest('div')")
-                    parent_text = parent.as_element().inner_text() if parent else ""
+                    # Extract drug name from URL slug (reliable regardless of DOM structure)
+                    slug = href.split('/p/')[-1].split('?')[0].split('/')[0]
+                    if not slug:
+                        continue
+                    drug_name = ' '.join(word.capitalize() for word in slug.replace('-', ' ').split())
 
-                    # Split by newlines to parse the structure
-                    lines = [line.strip() for line in parent_text.split('\n') if line.strip()]
+                    # Walk up the DOM to find a container with price info
+                    parent_text = link.evaluate("""el => {
+                        let node = el.parentElement;
+                        for (let i = 0; i < 6; i++) {
+                            if (!node) break;
+                            const text = node.innerText || '';
+                            if (text.includes('$')) return text;
+                            node = node.parentElement;
+                        }
+                        return '';
+                    }""")
 
-                    if len(lines) >= 2:
-                        # First line should be drug name
-                        drug_name = lines[0]
+                    price = None
+                    list_price = None
 
-                        # Look for price information (should start with $)
-                        price = None
+                    if parent_text:
+                        lines = [line.strip() for line in parent_text.split('\n') if line.strip()]
+                        for line in lines:
+                            if re.match(r'starting\s+(at|from)\s+\$', line, re.IGNORECASE):
+                                # e.g. "Starting at $149.00" — this is the government price
+                                if price is None:
+                                    price = parse_price(line)
+                            elif '·' in line and '$' in line:
+                                # e.g. "$1,349.02  ·  89% off" — this is the list/original price
+                                if list_price is None:
+                                    list_price = parse_price(line)
+                            elif line.startswith('$'):
+                                # Plain price line
+                                if price is None:
+                                    price = parse_price(line)
+
+                    # If only a "· X% off" line was found with no other price, its amount IS the gov price
+                    if price is None and list_price is not None:
+                        price = list_price
                         list_price = None
 
-                        for line in lines[1:]:
-                            if line.startswith('$'):
-                                if price is None:
-                                    # First price is the discounted price
-                                    price = line.strip()
-                                elif '·' in line:
-                                    # Line like "$316.12  ·  93% off" contains list price
-                                    list_price = line.split('·')[0].strip()
-                                    break
-
-                        if drug_name and price:
-                            drugs.append({
-                                "drug": drug_name,
-                                "price": price,
-                                "list_price": list_price or "N/A"
-                            })
-                            logger.debug(f"Extracted: {drug_name} - {price} (was {list_price})")
+                    if drug_name and price:
+                        drugs.append({
+                            "drug": drug_name,
+                            "price": price,
+                            "list_price": list_price or "N/A"
+                        })
+                        logger.debug(f"Extracted: {drug_name} - {price} (was {list_price})")
 
                 except Exception as e:
                     logger.warning(f"Error extracting drug data from link: {e}")
                     continue
-
-            # If the above method didn't work, try a simpler approach
-            if not drugs:
-                logger.info("Trying alternative extraction method...")
-                page_text = page.inner_text('body')
-
-                # Look for patterns in the text
-                # This is a fallback method
-                lines = [line.strip() for line in page_text.split('\n') if line.strip()]
-
-                i = 0
-                while i < len(lines):
-                    # Look for a drug name (typically ends with ®)
-                    if '®' in lines[i]:
-                        drug_name = lines[i]
-                        price = None
-                        list_price = None
-
-                        # Next lines should contain prices
-                        j = i + 1
-                        while j < min(i + 5, len(lines)):
-                            if lines[j].startswith('$'):
-                                if price is None:
-                                    price = lines[j]
-                                elif '·' in lines[j]:
-                                    list_price = lines[j].split('·')[0].strip()
-                                    break
-                            j += 1
-
-                        if price:
-                            drugs.append({
-                                "drug": drug_name,
-                                "price": price,
-                                "list_price": list_price or "N/A"
-                            })
-
-                    i += 1
 
         except PlaywrightTimeout:
             logger.error("Timeout waiting for page to load")
@@ -288,7 +284,7 @@ def append_to_csv(csv_path, drugs, date_str):
     return len(new_drugs)
 
 
-def append_to_google_sheet(sheet_id, drugs, date_str):
+def append_to_google_sheet(sheet_id, sheet_name, drugs, date_str):
     """
     Append drug data to Google Sheet, avoiding duplicates.
 
@@ -297,26 +293,13 @@ def append_to_google_sheet(sheet_id, drugs, date_str):
     """
     try:
         import gspread
-        from oauth2client.service_account import ServiceAccountCredentials
     except ImportError:
-        logger.error("gspread not installed. Install with: pip install gspread oauth2client")
+        logger.error("gspread not installed. Install with: pip install gspread")
         return 0
 
     try:
-        # Setup Google Sheets credentials
-        # Look for service account JSON in cfg directory
-        creds_path = os.path.join(CFG_DIR, "google-service-account.json")
-
-        if not os.path.exists(creds_path):
-            logger.warning(f"Google service account credentials not found at {creds_path}")
-            return 0
-
-        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-        creds = ServiceAccountCredentials.from_json_keyfile_name(creds_path, scope)
-        client = gspread.authorize(creds)
-
-        # Open the sheet
-        sheet = client.open_by_key(sheet_id).sheet1
+        gc = gspread.service_account()
+        sheet = gc.open_by_key(sheet_id).worksheet(sheet_name)
 
         # Get existing data
         existing_rows = sheet.get_all_values()
@@ -349,7 +332,7 @@ def append_to_google_sheet(sheet_id, drugs, date_str):
         return len(new_rows)
 
     except Exception as e:
-        logger.error(f"Error updating Google Sheet: {e}")
+        logger.error(f"Error updating Google Sheet: {type(e).__name__}: {e}", exc_info=True)
         return 0
 
 
@@ -451,7 +434,8 @@ def main():
     # Append to Google Sheet if configured
     new_rows_sheet = 0
     if config.get('google_sheet_id'):
-        new_rows_sheet = append_to_google_sheet(config['google_sheet_id'], drugs, date_str)
+        sheet_name = config.get('google_sheet_name', 'Sheet1')
+        new_rows_sheet = append_to_google_sheet(config['google_sheet_id'], sheet_name, drugs, date_str)
 
     # Send Telegram notification if configured
     if config.get('telegram_bot_token') and config.get('telegram_chat_id'):
