@@ -13,11 +13,11 @@ import {
   balanceHuntContent,
   balanceRedditContent,
   generateEmailSubject,
-} from './digest-utils.ts';
+} from './digest-utils.js';
 
 import {
   buildFormattedSportsSection,
-} from './sports-utils.ts';
+} from './sports-utils.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -47,8 +47,8 @@ const mockRawData = {
       sport: 'Basketball',
       completed: [
         {
-          type: 'completed',
-          result: 'WIN',
+          type: 'completed' as const,
+          result: 'WIN' as const,
           opponent: 'Lakers',
           score: '110-95',
           time: '19:30',
@@ -57,7 +57,7 @@ const mockRawData = {
       ],
       upcoming: [
         {
-          type: 'upcoming',
+          type: 'upcoming' as const,
           opponent: 'Warriors',
           location: 'vs',
           time: '20:00',

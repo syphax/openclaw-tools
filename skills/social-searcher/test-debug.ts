@@ -1,7 +1,7 @@
 import {
   balanceRedditContent,
   type RedditPost,
-} from './digest-utils.ts';
+} from './digest-utils.js';
 
 const posts: RedditPost[] = [
   { platform: 'reddit', title: 'Post 1', author: 'user1', subreddit: 'openclaw', url: 'url1' },

@@ -34,7 +34,7 @@ npx playwright install chrome
 ### First Run
 
 1. **Configure keywords**:
-   Edit `social-search-config.json` with your desired keywords and subreddits:
+   Edit `cfg/social-search-config.json` with your desired keywords and subreddits:
    ```json
    {
      "linkedin": {
@@ -57,15 +57,18 @@ npx playwright install chrome
    - Log in to LinkedIn manually
    - Your session will be saved for future runs
 
-3. **Run searches**:
+3. **Run the full daily digest**:
    ```bash
-   # Use default behavior (searches since last check)
-   ./run-hunt.sh
-
-   # Override time period (search last 5 days)
-   ./run-hunt.sh --days 5
+   ./run-daily-digest.sh
    ```
-   Results are saved to `search-results-YYYY-MM-DD.json`
+   This builds TypeScript, then runs the full pipeline: keyword hunt → Reddit pulse → sports → LLM synthesis and delivery.
+
+   Or run the keyword hunt only:
+   ```bash
+   ./run-hunt.sh           # searches since last check
+   ./run-hunt.sh --days 5  # override to last 5 days
+   ```
+   Results are saved to `~/.openclaw/data/social-searcher/`
 
 ## 📋 How It Works
 
@@ -86,18 +89,22 @@ npx playwright install chrome
 ### Data Flow
 
 ```
-Configuration (social-search-config.json)
+Configuration (cfg/social-search-config.json)
     ↓
-LinkedIn Search → Extract Posts
+1. social-searcher.ts  → search-results-YYYY-MM-DD.json  (LinkedIn + Reddit keywords)
     ↓
-Reddit Search → Extract Posts
+2. reddit-pulse.ts     → reddit-pulse-YYYY-MM-DD.json    (subreddit top posts)
     ↓
-Merge Results → Deduplicate
+3. sports-pulse.ts     → sports-raw-YYYY-MM-DD.json      (scores + upcoming matches)
     ↓
-Save to search-results-YYYY-MM-DD.json
+4. Merge              → raw-data-YYYY-MM-DD.json          (combined for LLM)
     ↓
-Update last_successful_search timestamps
+5. rex-engine.ts      → LLM synthesis → email + mobile delivery
+    ↓
+delivery-status-YYYY-MM-DD.json
 ```
+
+All output files are written to `~/.openclaw/data/social-searcher/`.
 
 ## 📁 File Structure
 
@@ -105,12 +112,24 @@ Update last_successful_search timestamps
 social-searcher/
 ├── SKILL.md                      # OpenClaw skill definition (for AI)
 ├── README.md                     # This file (for humans)
-├── run-hunt.sh                   # Main execution script
-├── social-searcher.ts            # TypeScript implementation
-├── social-search-config.json     # Configuration file
-├── search-results-*.json         # Daily result files
+├── run-daily-digest.sh           # Primary cron/execution script (full pipeline)
+├── run-hunt.sh                   # Keyword hunt only
+├── run-pulse.sh                  # Reddit pulse only
+├── daily-digest.ts / .js         # Pipeline orchestrator
+├── social-searcher.ts            # LinkedIn + Reddit keyword search
+├── reddit-pulse.ts               # Reddit subreddit top posts
+├── sports-pulse.ts               # Sports results + upcoming matches
+├── rex-engine.ts                 # LLM synthesis and delivery
+├── digest-utils.ts               # Content balancing + link formatting
+├── sports-engine.ts              # Sports data processing
+├── sports-utils.ts               # Sports formatting utilities
+├── cfg/
+│   ├── social-search-config.json # Keywords and subreddits config
+│   └── addresses.json            # Email/mobile delivery addresses
+├── logs/                         # Run logs (gitignored)
+│   ├── cron-digest-run.log
+│   └── last-run-status.json
 ├── package.json                  # NPM dependencies
-├── package-lock.json             # Locked dependencies
 ├── tsconfig.json                 # TypeScript config
 └── node_modules/                 # Installed packages
 ```
@@ -119,7 +138,7 @@ social-searcher/
 
 ### Keywords and Subreddits
 
-Edit `social-search-config.json`:
+Edit `cfg/social-search-config.json`:
 
 ```json
 {
@@ -153,7 +172,7 @@ Edit `social-search-config.json`:
 
 ### Resetting Search History
 
-To re-scan older content, manually edit the `last_successful_search` timestamps in the config file to an earlier date.
+To re-scan older content, manually edit the `last_successful_search` timestamps in `cfg/social-search-config.json` to an earlier date.
 
 ### Time Period Override
 
@@ -180,7 +199,7 @@ Use the `--days` parameter to override the default time filtering:
 
 ## 📊 Output Format
 
-Results are saved to `search-results-YYYY-MM-DD.json` with this structure:
+Results are saved to `~/.openclaw/data/social-searcher/`. The keyword hunt output (`search-results-YYYY-MM-DD.json`) has this structure:
 
 ```json
 [
@@ -219,11 +238,11 @@ rm -rf ~/.openclaw/browser-profiles/social-searcher
 
 ### Script Permission Denied
 
-**Symptom**: `bash: ./run-hunt.sh: Permission denied`
+**Symptom**: `bash: ./run-daily-digest.sh: Permission denied`
 
 **Solution**:
 ```bash
-chmod +x run-hunt.sh
+chmod +x run-daily-digest.sh run-hunt.sh run-pulse.sh
 ```
 
 ### Node/NPM Not Found
@@ -262,13 +281,13 @@ npm install
 
 ## ⚡ Usage with OpenClaw
 
-Once installed, Claude can use this skill via the `social_searcher_hunt` tool:
+Once installed, Claude can use this skill via the `social_searcher_daily_digest` tool:
 
-**User**: "Run a social media hunt for my keywords"
+**User**: "Run the daily digest"
 
-**Claude**: *Executes `~/.openclaw/skills/social-searcher/run-hunt.sh`*
+**Claude**: *Executes `~/.openclaw/skills/social-searcher/run-daily-digest.sh`*
 
-**Output**: Results are saved and can be analyzed by Claude in subsequent requests.
+**Output**: Full pipeline runs — hunt, pulse, sports, LLM synthesis, email + mobile delivery. Logs at `logs/cron-digest-run.log`.
 
 ## 🔒 Security & Privacy
 
@@ -297,17 +316,19 @@ The skill is automatically available in OpenClaw via `SKILL.md`. Claude will inv
 ### Manual Execution
 
 ```bash
-# Direct TypeScript execution
-npx ts-node social-searcher.ts
+# Full pipeline (recommended)
+./run-daily-digest.sh
 
-# With time override (last 7 days)
-npx ts-node social-searcher.ts --days 7
-
-# Via wrapper script (recommended)
+# Keyword hunt only
 ./run-hunt.sh
+./run-hunt.sh --days 7   # with time override
 
-# Via wrapper script with time override
-./run-hunt.sh --days 7
+# Reddit pulse only
+./run-pulse.sh
+
+# Direct TypeScript execution (for debugging)
+npx ts-node --esm social-searcher.ts
+npx ts-node --esm daily-digest.ts
 ```
 
 ### Scheduling Automated Runs
@@ -318,8 +339,8 @@ Use cron to run periodic searches:
 # Edit crontab
 crontab -e
 
-# Add entry (runs daily at 9 AM)
-0 9 * * * cd ~/.openclaw/skills/social-searcher && ./run-hunt.sh
+# Add entry (runs daily at 7 AM)
+0 7 * * * /Users/you/.openclaw/skills/social-searcher/run-daily-digest.sh
 ```
 
 ### Processing Results
@@ -332,7 +353,7 @@ from pathlib import Path
 from datetime import date
 
 # Load today's results
-results_file = Path(f"search-results-{date.today()}.json")
+results_file = Path.home() / f".openclaw/data/social-searcher/search-results-{date.today()}.json"
 if results_file.exists():
     with open(results_file) as f:
         posts = json.load(f)
@@ -374,27 +395,29 @@ if results_file.exists():
 
 ### Modifying the Code
 
-The main logic is in `social-searcher.ts`:
-
-```typescript
-// Key functions:
-- loadConfig()          // Load configuration
-- searchLinkedIn()      // LinkedIn scraping logic
-- searchReddit()        // Reddit API calls
-- main()                // Orchestration
-```
+Key source files:
+- `social-searcher.ts` — LinkedIn + Reddit keyword search
+- `reddit-pulse.ts` — Reddit subreddit top posts
+- `sports-pulse.ts` — Sports scores and upcoming matches
+- `rex-engine.ts` — LLM synthesis and delivery
+- `daily-digest.ts` — Pipeline orchestrator
+- `digest-utils.ts` — Content balancing, link formatting
+- `sports-engine.ts` / `sports-utils.ts` — Sports data processing
 
 ### Testing Changes
 
 ```bash
-# Compile TypeScript
-npm run build
+# Type-check without emitting
+npx tsc --noEmit
 
-# Run compiled version
-npm start
+# Build
+npx tsc
 
-# Or run directly with ts-node
-npx ts-node social-searcher.ts
+# Run full pipeline
+./run-daily-digest.sh
+
+# Run individual scripts with ts-node
+npx ts-node --esm social-searcher.ts
 ```
 
 ### Adding New Platforms

@@ -12,7 +12,7 @@ import {
   generateEmailSubject,
   type RedditPost,
   type LinkedInPost,
-} from './digest-utils.ts';
+} from './digest-utils.js';
 
 function assert(condition: boolean, message: string) {
   if (!condition) {
@@ -56,10 +56,10 @@ function testBalanceHuntContent() {
   const huntData: (LinkedInPost | RedditPost)[] = [
     { platform: 'linkedin', keyword: 'AI', author: 'john', content: 'AI post 1', url: 'url1', title: 'AI 1' },
     { platform: 'linkedin', keyword: 'AI', author: 'jane', content: 'AI post 2', url: 'url2', title: 'AI 2' },
-    { platform: 'reddit', title: 'Reddit 1', author: 'user1', subreddit: 'openclaw', url: 'url3', platform: 'reddit' },
-    { platform: 'reddit', title: 'Reddit 2', author: 'user2', subreddit: 'openclaw', url: 'url4', platform: 'reddit' },
-    { platform: 'reddit', title: 'Reddit 3', author: 'user3', subreddit: 'openclaw', url: 'url5', platform: 'reddit' },
-    { platform: 'reddit', title: 'Reddit 4', author: 'user4', subreddit: 'vermont', url: 'url6', platform: 'reddit' },
+    { platform: 'reddit', title: 'Reddit 1', author: 'user1', subreddit: 'openclaw', url: 'url3' },
+    { platform: 'reddit', title: 'Reddit 2', author: 'user2', subreddit: 'openclaw', url: 'url4' },
+    { platform: 'reddit', title: 'Reddit 3', author: 'user3', subreddit: 'openclaw', url: 'url5' },
+    { platform: 'reddit', title: 'Reddit 4', author: 'user4', subreddit: 'vermont', url: 'url6' },
   ];
 
   const result = balanceHuntContent(huntData, 10, 3);

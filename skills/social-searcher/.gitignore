@@ -1,6 +1,9 @@
 # Node modules
 node_modules/
 
+# Logs
+logs/
+
 # Build outputs
 *.js
 *.js.map

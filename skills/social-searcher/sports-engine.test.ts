@@ -16,7 +16,7 @@ import {
   type TeamConfig,
   type RawMatch,
   type ProcessedMatch,
-} from './sports-engine.ts';
+} from './sports-engine.js';
 
 // Test helpers
 function runTest(name: string, fn: () => void) {

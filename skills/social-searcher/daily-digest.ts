@@ -21,13 +21,13 @@ async function main() {
 
   try {
     console.log('🔍 Running Keyword Hunt...');
-    execSync('npx ts-node --esm social-searcher.ts', { cwd: __dirname, stdio: 'inherit' });
+    execSync('npx tsx social-searcher.ts', { cwd: __dirname, stdio: 'inherit' });
 
     console.log('🔍 Running Reddit Pulse...');
-    execSync('npx ts-node --esm reddit-pulse.ts', { cwd: __dirname, stdio: 'inherit' });
+    execSync('npx tsx reddit-pulse.ts', { cwd: __dirname, stdio: 'inherit' });
 
     console.log('🔍 Running Sports Pulse...');
-    execSync('npx ts-node --esm sports-pulse.ts', { cwd: __dirname, stdio: 'inherit' });
+    execSync('npx tsx sports-pulse.ts', { cwd: __dirname, stdio: 'inherit' });
 
     const huntData = fs.existsSync(huntFile) ? JSON.parse(fs.readFileSync(huntFile, 'utf-8')) : [];
     const pulseData = fs.existsSync(pulseFile) ? JSON.parse(fs.readFileSync(pulseFile, 'utf-8')) : [];
@@ -44,7 +44,7 @@ async function main() {
     fs.writeFileSync(rawDataPath, JSON.stringify(rawDataSummary, null, 2));
 
     console.log('🦖 Raw data collected. Powering up Rex Engine for synthesis...');
-    execSync('npx ts-node --esm rex-engine.ts', { cwd: __dirname, stdio: 'inherit' });
+    execSync('npx tsx rex-engine.ts', { cwd: __dirname, stdio: 'inherit' });
 
     console.log('🦖 Daily Digest complete and delivered!');
     process.exit(0);

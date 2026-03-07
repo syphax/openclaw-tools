@@ -7,10 +7,10 @@
 import {
   balanceHuntContent,
   balanceRedditContent,
-} from './digest-utils.ts';
+} from './digest-utils.js';
 import {
   buildFormattedSportsSection,
-} from './sports-utils.ts';
+} from './sports-utils.js';
 
 console.log('✅ Import compatibility test passed (modules loaded successfully with .js extensions)');
 

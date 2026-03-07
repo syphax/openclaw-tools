@@ -265,9 +265,15 @@ export function formatResultLine(match: ProcessedMatch): string {
 
 /**
  * Format a single upcoming match line.
+ * Handles both scheduled matches and today's in-progress/completed games.
  */
 export function formatUpcomingLine(match: ProcessedMatch): string {
   const dateShort = formatDateShort(match.date);
+  if (match.type === 'result') {
+    // Today's game already has scores — show result inline
+    const emoji = match.result === 'WIN' ? '🟢' : match.result === 'LOSS' ? '🔴' : '🟡';
+    return `${match.team.toUpperCase()}: vs ${match.opponent} ${emoji} ${match.score}, ${dateShort}`;
+  }
   const timeStr = match.time ? ` at ${match.time}` : '';
   return `${match.team.toUpperCase()}: ${match.location} ${match.opponent}, ${dateShort}${timeStr}`;
 }
@@ -287,7 +293,7 @@ export function buildSportsSection(
   // Calculate date windows
   const runDateObj = new Date(runDate + 'T00:00:00Z');
 
-  // Results: past 3 days (runDate - 3 to runDate - 1)
+  // Results: past 3 days (yesterday and before — today's games always go to upcoming)
   const resultsStart = new Date(runDateObj);
   resultsStart.setUTCDate(resultsStart.getUTCDate() - 3);
   const resultsStartStr = resultsStart.toISOString().split('T')[0];
@@ -296,8 +302,7 @@ export function buildSportsSection(
   resultsEnd.setUTCDate(resultsEnd.getUTCDate() - 1);
   const resultsEndStr = resultsEnd.toISOString().split('T')[0];
 
-  // Upcoming: today + 2 days (runDate to runDate + 2)
-  const upcomingStart = runDate;
+  // Upcoming: today + 2 days. Includes ALL matches today (scheduled, in-progress, or finished).
   const upcomingEnd = new Date(runDateObj);
   upcomingEnd.setUTCDate(upcomingEnd.getUTCDate() + 2);
   const upcomingEndStr = upcomingEnd.toISOString().split('T')[0];
@@ -313,9 +318,10 @@ export function buildSportsSection(
       .map(m => processMatch(m, teamConfig))
       .filter((m): m is ProcessedMatch => m !== null);
 
-    // Filter by date windows
+    // Results: only completed games from before today
     const results = filterByDateWindow(teamMatches.filter(m => m.type === 'result'), resultsStartStr, resultsEndStr);
-    const upcoming = filterByDateWindow(teamMatches.filter(m => m.type === 'upcoming'), upcomingStart, upcomingEndStr);
+    // Upcoming: ALL matches today and future (scheduled, in-progress, or finished today)
+    const upcoming = filterByDateWindow(teamMatches, runDate, upcomingEndStr);
 
     if (results.length > 0 || upcoming.length > 0) {
       teamsWithActivity.add(teamConfig.name);

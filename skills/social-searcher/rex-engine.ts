@@ -5,23 +5,18 @@ import { spawnSync } from 'child_process';
 import {
   balanceHuntContent,
   balanceRedditContent,
-  formatWhatsAppLink,
   formatTelegramLink,
-  formatEmailLink,
   generateEmailSubject,
   logBalanceStats,
-  type RedditPost,
-  type LinkedInPost,
-} from './digest-utils.ts';
+} from './digest-utils.js';
 import {
   buildSportsSection,
   type RawMatch,
-} from './sports-engine.ts';
+} from './sports-engine.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const addressCfg = JSON.parse(fs.readFileSync(path.join(__dirname, 'cfg', 'addresses.json'), 'utf-8'));
 
 function readCredentialsEnv(): string {
@@ -40,6 +35,8 @@ function readEnvVarFromText(content: string, key: string): string | undefined {
 }
 
 const credentialsEnv = readCredentialsEnv();
+const OPENROUTER_API_KEY =
+  process.env.OPENROUTER_API_KEY || readEnvVarFromText(credentialsEnv, 'OPENROUTER_API_KEY');
 const RESOLVED_GOG_KEYRING_PASSWORD =
   process.env.GOG_KEYRING_PASSWORD || readEnvVarFromText(credentialsEnv, 'GOG_KEYRING_PASSWORD');
 const RESOLVED_GOG_KEYRING_BACKEND =
@@ -256,7 +253,7 @@ async function callLlmApi(prompt: string, attemptNum: number): Promise<any> {
   return content;
 }
 
-async function synthesize(rawData: any, processedData: ProcessedDigestData) {
+async function synthesize(_rawData: any, processedData: ProcessedDigestData) {
   if (!OPENROUTER_API_KEY) {
     throw new Error('OPENROUTER_API_KEY not found in environment.');
   }
@@ -279,7 +276,7 @@ ${JSON.stringify(processedData, null, 2)}
 
 ### YOUR TASKS:
 
-1. **Keyword Roundup (AI Hunt):**
+1. **Keyword Search Roundup:**
    - Items in 'huntData.selected' are PRE-SELECTED and PRE-BALANCED.
    - For EACH item: Write 1-2 sentences explaining WHY it matters to Brian.
    - Format: Use HTML <a> tags for links.

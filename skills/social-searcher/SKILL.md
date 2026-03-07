@@ -36,30 +36,40 @@ Avoid using this skill for:
 
 ## Usage
 
-The skill is invoked by running the hunt script:
+The full daily pipeline is run via:
 
 ```bash
-~/.openclaw/skills/social-searcher/run-hunt.sh
+~/.openclaw/skills/social-searcher/run-daily-digest.sh
+```
+
+This builds the TypeScript, then runs the complete pipeline in order:
+1. **Keyword Hunt** (`social-searcher.ts`) — LinkedIn + Reddit keyword search
+2. **Reddit Pulse** (`reddit-pulse.ts`) — Subreddit top/trending posts
+3. **Sports Pulse** (`sports-pulse.ts`) — Sports results and upcoming matches
+4. **Rex Engine** (`rex-engine.ts`) — LLM synthesis and email/mobile delivery
+
+Logs are written to `logs/cron-digest-run.log` and status to `logs/last-run-status.json`.
+
+Individual scripts can also be run directly for debugging:
+
+```bash
+~/.openclaw/skills/social-searcher/run-hunt.sh       # Keyword hunt only
+~/.openclaw/skills/social-searcher/run-pulse.sh      # Reddit pulse only
 ```
 
 ### Tools
 
+#### `social_searcher_daily_digest`
+
+Runs the full pipeline: hunt, pulse, sports, and LLM synthesis/delivery.
+
+**Command:** `~/.openclaw/skills/social-searcher/run-daily-digest.sh`
+
 #### `social_searcher_hunt`
 
-Runs the search across LinkedIn and Reddit using the configured keywords and time-filtering.
+Runs the keyword search across LinkedIn and Reddit only.
 
 **Command:** `~/.openclaw/skills/social-searcher/run-hunt.sh [--days N]`
-
-...
-
-#### `social_searcher_pulse`
-
-Scans subreddits for top/trending posts to get a "pulse" of current discussions.
-
-**Command:** `~/.openclaw/skills/social-searcher/run-pulse.sh [--days N]`
-
-**Parameters:**
-- `--days N` (optional) — Look back N days for top content (default: 7).
 
 **Parameters:**
 - `--days N` (optional) — Override the time period to search the last N days instead of using `last_successful_search` from config
@@ -67,17 +77,23 @@ Scans subreddits for top/trending posts to get a "pulse" of current discussions.
   - When omitted, defaults to searching since the `last_successful_search` timestamp in config
   - Using `--days` will NOT update the `last_successful_search` config values
 
-**Returns:** JSON output with search results and status
+#### `social_searcher_pulse`
+
+Scans subreddits for top/trending posts to get a "pulse" of current discussions.
+
+**Command:** `~/.openclaw/skills/social-searcher/run-pulse.sh`
+
+**Returns:** JSON output saved to `~/.openclaw/data/social-searcher/reddit-pulse-YYYY-MM-DD.json`
 
 **Example invocations:**
+- "Run the daily digest" — Full pipeline via `run-daily-digest.sh`
 - "Run a social hunt for my keywords" — Uses last check date from config
 - "Search LinkedIn and Reddit for new posts from the last 7 days" — Uses `--days 7` override
-- "Hunt for social posts in the last 3 days" — Uses `--days 3` override
 
 ## Configuration
 
 The keywords and subreddits are managed in:
-`~/.openclaw/skills/social-searcher/social-search-config.json`
+`~/.openclaw/skills/social-searcher/cfg/social-search-config.json`
 
 ### Configuration Structure
 
@@ -101,8 +117,12 @@ To update keywords or subreddits, edit the config file directly. The timestamps 
 
 ## Output
 
-Results are saved to daily JSON files in the skill directory:
-`search-results-YYYY-MM-DD.json`
+Results are saved to daily JSON files in `~/.openclaw/data/social-searcher/`:
+- `search-results-YYYY-MM-DD.json` — keyword hunt results
+- `reddit-pulse-YYYY-MM-DD.json` — Reddit pulse results
+- `sports-raw-YYYY-MM-DD.json` — raw sports data
+- `raw-data-YYYY-MM-DD.json` — merged data passed to Rex Engine
+- `delivery-status-YYYY-MM-DD.json` — delivery status (email/mobile)
 
 ### Output Structure
 
@@ -155,13 +175,13 @@ Results are saved to daily JSON files in the skill directory:
 
 When using this skill, follow this workflow:
 
-1. **Configure keywords** — Edit `social-search-config.json` with desired keywords and subreddits
-2. **Run the hunt** — Execute the search script via the OpenClaw tool
-   - Normal run: `./run-hunt.sh` (uses last check date from config)
-   - Time override: `./run-hunt.sh --days 5` (searches last 5 days)
-3. **Review results** — Check the daily JSON file for new posts
-4. **Analyze content** — Use separate analysis tools to process the collected data
-5. **Repeat periodically** — Run searches on a schedule to maintain fresh data
+1. **Configure keywords** — Edit `cfg/social-search-config.json` with desired keywords and subreddits
+2. **Run the daily digest** — `./run-daily-digest.sh` (full pipeline)
+   - Or hunt only: `./run-hunt.sh` (uses last check date from config)
+   - Or with override: `./run-hunt.sh --days 5` (searches last 5 days)
+3. **Check logs** — `logs/cron-digest-run.log` and `logs/last-run-status.json`
+4. **Review results** — Check `~/.openclaw/data/social-searcher/` for daily JSON files
+5. **Repeat periodically** — Schedule via cron using `run-daily-digest.sh`
 
 ## Error Handling
 
@@ -263,7 +283,9 @@ All dependencies are defined in `package.json` and installed via `npm install`:
 
 If you get "Permission denied" error:
 ```bash
+chmod +x ~/.openclaw/skills/social-searcher/run-daily-digest.sh
 chmod +x ~/.openclaw/skills/social-searcher/run-hunt.sh
+chmod +x ~/.openclaw/skills/social-searcher/run-pulse.sh
 ```
 
 ### Node/NPM Not Found

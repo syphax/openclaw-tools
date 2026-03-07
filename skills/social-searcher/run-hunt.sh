@@ -51,7 +51,7 @@ fi
 
 # Run the TypeScript script, forwarding all arguments
 echo "Starting social media hunt..." >&2
-if npx ts-node social-searcher.ts "$@"; then
+if npx tsx social-searcher.ts "$@"; then
     echo "Hunt completed successfully!" >&2
     exit 0
 else

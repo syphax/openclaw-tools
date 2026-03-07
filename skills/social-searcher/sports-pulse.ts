@@ -26,6 +26,7 @@ interface TeamConfig {
 
 interface SportsConfig {
   teams: TeamConfig[];
+  extraLeagues?: string[];
 }
 
 // Matches RawMatch in sports-engine.ts (with eventId added)
@@ -127,7 +128,7 @@ async function main() {
 
   // Build quick lookups
   const teamById  = new Map(config.teams.map(t => [t.espnId, t]));
-  const leagues   = [...new Set(config.teams.map(t => t.espnSport))];
+  const leagues   = [...new Set([...config.teams.map(t => t.espnSport), ...(config.extraLeagues ?? [])])];
 
   // Date window: past 3 days (-3) through today+2 days (+2)
   const now = new Date();

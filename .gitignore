@@ -239,3 +239,4 @@ skills/world-cup-tickets/logs/last-run-status-collect.json
 
 skills/govrx/debug/*
 skills/govrx/cfg/*
+skills/govrx/logs/last-run-status-costplus.json

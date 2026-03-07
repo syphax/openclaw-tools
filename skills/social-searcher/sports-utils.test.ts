@@ -13,7 +13,7 @@ import {
   buildSportsSection,
   type SportsMatch,
   type TeamSportsData,
-} from './sports-utils.ts';
+} from './sports-utils.js';
 
 function assert(condition: boolean, message: string) {
   if (!condition) {
