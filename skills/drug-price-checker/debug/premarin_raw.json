@@ -1,0 +1,121 @@
+{
+  "data": {
+    "products": {
+      "edges": [
+        {
+          "node": {
+            "id": "UHJvZHVjdDoxODUz",
+            "name": "Premarin (Conjugated Estrogens)",
+            "priceCalculation": 192.85,
+            "retailPrice": 249.3,
+            "collections": [
+              {
+                "name": "Women's Health",
+                "slug": "women's-health"
+              },
+              {
+                "name": "Hormone Therapy",
+                "slug": "hormone-therapy"
+              }
+            ],
+            "variants": [
+              {
+                "id": "UHJvZHVjdFZhcmlhbnQ6NTcwNQ==",
+                "sku": "24000015000310-Premarin",
+                "metafields": {
+                  "sku": "24000015000310-Premarin",
+                  "form": "Tablet",
+                  "slug": "premarin-0_3mg-tablet",
+                  "is_active": "true",
+                  "package_size": "100",
+                  "insuranceEligible": "false",
+                  "retailPricePerUnit": "8.31"
+                }
+              },
+              {
+                "id": "UHJvZHVjdFZhcmlhbnQ6NTcwNg==",
+                "sku": "24000015000315-Premarin",
+                "metafields": {
+                  "sku": "24000015000315-Premarin",
+                  "form": "Tablet",
+                  "slug": "premarin-0_45mg-tablet",
+                  "is_active": "true",
+                  "package_size": "100",
+                  "insuranceEligible": false,
+                  "retailPricePerUnit": "8.30"
+                }
+              },
+              {
+                "id": "UHJvZHVjdFZhcmlhbnQ6NTcwNw==",
+                "sku": "24000015000320-Premarin",
+                "metafields": {
+                  "sku": "24000015000320-Premarin",
+                  "form": "Tablet",
+                  "slug": "premarin-0_625mg-tablet",
+                  "is_active": "true",
+                  "package_size": "100",
+                  "insuranceEligible": false,
+                  "retailPricePerUnit": "8.23"
+                }
+              },
+              {
+                "id": "UHJvZHVjdFZhcmlhbnQ6NTcwOQ==",
+                "sku": "24000015000325-Premarin",
+                "metafields": {
+                  "sku": "24000015000325-Premarin",
+                  "form": "Tablet",
+                  "slug": "premarin-0_9mg-tablet",
+                  "is_active": "true",
+                  "package_size": "100",
+                  "insuranceEligible": false,
+                  "retailPricePerUnit": "8.31"
+                }
+              },
+              {
+                "id": "UHJvZHVjdFZhcmlhbnQ6NTcxMA==",
+                "sku": "24000015000330-Premarin",
+                "metafields": {
+                  "sku": "24000015000330-Premarin",
+                  "form": "Tablet",
+                  "slug": "premarin-1_25mg-tablet",
+                  "is_active": "true",
+                  "package_size": "100",
+                  "insuranceEligible": false,
+                  "retailPricePerUnit": "8.28"
+                }
+              },
+              {
+                "id": "UHJvZHVjdFZhcmlhbnQ6ODM2OQ==",
+                "sku": "55350025003710-30-Premarin",
+                "metafields": {
+                  "sku": "55350025003710-30-Premarin",
+                  "form": "Cream",
+                  "slug": "premarin-0_625mg-gm-30gm",
+                  "is_active": "true",
+                  "package_size": "30",
+                  "insuranceEligible": false,
+                  "retailPricePerUnit": "562.00"
+                }
+              }
+            ],
+            "metafields": {
+              "brandName": "",
+              "brandGeneric": "Trademark"
+            },
+            "slug": "premarin-0_3mg-tablet"
+          }
+        }
+      ],
+      "totalCount": 1,
+      "pageInfo": {
+        "hasNextPage": false
+      }
+    }
+  },
+  "extensions": {
+    "cost": {
+      "requestedQueryCost": 150,
+      "maximumAvailable": 50000
+    }
+  }
+}

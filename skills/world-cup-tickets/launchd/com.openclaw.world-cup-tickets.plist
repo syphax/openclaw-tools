@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.openclaw.world-cup-tickets</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/bcc/Code/git/openclaw-tools/skills/world-cup-tickets/scripts/run_daily.sh</string>
+    </array>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>4</integer>
+        <key>Minute</key>
+        <integer>17</integer>
+    </dict>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/bcc/Code/git/openclaw-tools/skills/world-cup-tickets/logs/world-cup-tickets-run.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/bcc/Code/git/openclaw-tools/skills/world-cup-tickets/logs/world-cup-tickets-run.log</string>
+
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>

@@ -1,0 +1,8 @@
+# Prompts
+
+This directory contains the prompts used to generate the code in this repository. 
+Note that while I generally attempt to retain any iterative conversations in these prompts, 
+there are inevitably conversations between Claude Code and myself that are not captured here.
+
+There are also some prompts which are specific to my OC setup; I kept them in here for my convenience.
+

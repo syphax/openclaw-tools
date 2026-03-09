@@ -1,0 +1,53 @@
+{
+  "extraLeagues": ["soccer/eng.fa", "soccer/uefa.champions"],
+  "teams": [
+    {
+      "name": "Borussia Dortmund",
+      "league": "Bundesliga",
+      "sport": "Soccer",
+      "country": "Germany",
+      "espnSport": "soccer/ger.1",
+      "espnId": "124"
+    },
+    {
+      "name": "Sunderland",
+      "league": "Premier League",
+      "sport": "Soccer",
+      "country": "England",
+      "espnSport": "soccer/eng.1",
+      "espnId": "366"
+    },
+    {
+      "name": "Wrexham",
+      "league": "Championship",
+      "sport": "Soccer",
+      "country": "England",
+      "espnSport": "soccer/eng.2",
+      "espnId": "352"
+    },
+    {
+      "name": "Red Sox",
+      "league": "MLB",
+      "sport": "Baseball",
+      "country": "USA",
+      "espnSport": "baseball/mlb",
+      "espnId": "2"
+    },
+    {
+      "name": "Bruins",
+      "league": "NHL",
+      "sport": "Hockey",
+      "country": "USA",
+      "espnSport": "hockey/nhl",
+      "espnId": "1"
+    },
+    {
+      "name": "Celtics",
+      "league": "NBA",
+      "sport": "Basketball",
+      "country": "USA",
+      "espnSport": "basketball/nba",
+      "espnId": "2"
+    }
+  ]
+}

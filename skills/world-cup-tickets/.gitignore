@@ -1,19 +1,15 @@
-# Logs
+# Logs (keep directory, exclude contents)
 logs/*.log
-*.log
+logs/*.json
+logs/arc/
 
 # Data files
-data/*.csv
-
-# Google credentials
-cfg/google-service-account.json
+ticket-price-history*.csv
 
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
-.Python
 venv/
 env/
 ENV/
@@ -32,6 +28,8 @@ Thumbs.db
 # Playwright
 .playwright/
 
-# Backup files
-*.backup
-*.bak
+# Config with private info
+cfg/private-info.json
+
+# Debug network traces
+debug/

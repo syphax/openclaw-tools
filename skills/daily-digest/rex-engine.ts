@@ -37,6 +37,15 @@ function readEnvVarFromText(content: string, key: string): string | undefined {
 const credentialsEnv = readCredentialsEnv();
 const OPENROUTER_API_KEY =
   process.env.OPENROUTER_API_KEY || readEnvVarFromText(credentialsEnv, 'OPENROUTER_API_KEY');
+const OPENAI_API_KEY =
+  process.env.OPENAI_API_KEY || readEnvVarFromText(credentialsEnv, 'OPENAI_API_KEY');
+
+const socialSearchCfg = JSON.parse(
+  fs.readFileSync(path.join(__dirname, 'cfg', 'social-search-config.json'), 'utf-8'),
+);
+const LLM_MODEL: string = socialSearchCfg.llm?.model ?? 'google/gemini-2.0-flash-001';
+const LLM_PROVIDER: string = socialSearchCfg.llm?.provider ?? 'openrouter';
+
 const RESOLVED_GOG_KEYRING_PASSWORD =
   process.env.GOG_KEYRING_PASSWORD || readEnvVarFromText(credentialsEnv, 'GOG_KEYRING_PASSWORD');
 const RESOLVED_GOG_KEYRING_BACKEND =
@@ -221,19 +230,49 @@ function validateLlmResponse(parsed: any): void {
   console.log('✅ LLM response validation passed');
 }
 
-async function callLlmApi(prompt: string, attemptNum: number): Promise<any> {
-  console.log(`  🔄 LLM API call attempt ${attemptNum}...`);
+function getLlmConfig(): { url: string; apiKey: string | undefined; model: string; extraHeaders: Record<string, string> } {
+  // Strip openclaw namespace prefixes — the underlying APIs don't use them.
+  // e.g. "openrouter/google/gemini-3-flash-preview" → "google/gemini-3-flash-preview"
+  //      "openai-codex/gpt-5.4" → "gpt-5.4"
+  const stripPrefixes = (id: string, ...prefixes: string[]) => {
+    for (const p of prefixes) if (id.startsWith(p + '/')) return id.slice(p.length + 1);
+    return id;
+  };
 
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-      'Content-Type': 'application/json',
+  if (LLM_PROVIDER === 'openai') {
+    return {
+      url: 'https://api.openai.com/v1/chat/completions',
+      apiKey: OPENAI_API_KEY,
+      model: stripPrefixes(LLM_MODEL, 'openai', 'openai-codex'),
+      extraHeaders: {},
+    };
+  }
+
+  // Default: openrouter
+  return {
+    url: 'https://openrouter.ai/api/v1/chat/completions',
+    apiKey: OPENROUTER_API_KEY,
+    model: stripPrefixes(LLM_MODEL, 'openrouter'),
+    extraHeaders: {
       'HTTP-Referer': 'https://openclaw.io',
       'X-Title': 'Social Searcher Rex Engine',
     },
+  };
+}
+
+async function callLlmApi(prompt: string, attemptNum: number): Promise<any> {
+  console.log(`  🔄 LLM API call attempt ${attemptNum} [${LLM_PROVIDER}/${LLM_MODEL}]...`);
+
+  const llm = getLlmConfig();
+  const response = await fetch(llm.url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${llm.apiKey}`,
+      'Content-Type': 'application/json',
+      ...llm.extraHeaders,
+    },
     body: JSON.stringify({
-      model: 'google/gemini-2.0-flash-001',
+      model: llm.model,
       messages: [{ role: 'user', content: prompt }],
       response_format: { type: 'json_object' },
     }),
@@ -254,8 +293,10 @@ async function callLlmApi(prompt: string, attemptNum: number): Promise<any> {
 }
 
 async function synthesize(_rawData: any, processedData: ProcessedDigestData) {
-  if (!OPENROUTER_API_KEY) {
-    throw new Error('OPENROUTER_API_KEY not found in environment.');
+  const llmCfgCheck = getLlmConfig();
+  if (!llmCfgCheck.apiKey) {
+    const keyName = LLM_PROVIDER === 'openai' ? 'OPENAI_API_KEY' : 'OPENROUTER_API_KEY';
+    throw new Error(`${keyName} not found in environment (provider: ${LLM_PROVIDER}).`);
   }
 
   console.log('\n🤖 Sending to LLM for commentary and synthesis...');
