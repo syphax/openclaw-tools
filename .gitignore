@@ -232,6 +232,10 @@ yarn-error.log*
 
 # Data
 *.csv
+*/logs/*.txt
+*/data/*.txt
+
+# Specific files to ignore
 skills/world-cup-tickets/ticket-price-history.csv
 skills/world-cup-tickets/logs/daily-415-summary.json
 skills/world-cup-tickets/logs/last-run-status.json
@@ -240,3 +244,4 @@ skills/world-cup-tickets/logs/last-run-status-collect.json
 skills/govrx/debug/*
 skills/govrx/cfg/*
 skills/govrx/logs/last-run-status-costplus.json
+skills/stop-election-texts/cfg/config.json

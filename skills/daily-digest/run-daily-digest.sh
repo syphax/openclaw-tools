@@ -33,6 +33,14 @@ fi
 start_ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 local_date=$(date +"%Y-%m-%d")
 
+# Idempotency guard: skip if already delivered successfully today
+if [[ -f "$STATUS_FILE" ]] && \
+   grep -q "\"date\":\"${local_date}\"" "$STATUS_FILE" && \
+   grep -q "\"status\":\"success\"" "$STATUS_FILE"; then
+  echo "[$(date +"%Y-%m-%d %H:%M:%S %Z")] Digest already delivered today (${local_date}), skipping." >> "$RUN_LOG"
+  exit 0
+fi
+
 {
   echo "[$(date +"%Y-%m-%d %H:%M:%S %Z")] Starting Daily Digest"
   npx tsx daily-digest.ts

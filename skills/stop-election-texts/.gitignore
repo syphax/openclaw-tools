@@ -1,0 +1,11 @@
+node_modules/
+dist/
+
+# Data files (local only)
+data/*.csv
+data/*.json
+
+# Logs
+logs/*.log
+logs/*.json
+logs/arc/
