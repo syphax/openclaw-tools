@@ -9,7 +9,6 @@ import json
 import logging
 import os
 import re
-import subprocess
 import sys
 import time
 from datetime import datetime
@@ -40,44 +39,6 @@ logging.basicConfig(
 logger = logging.getLogger("govrx")
 
 
-def ensure_dependencies():
-    """Auto-install required packages if not available."""
-    deps = {"playwright": "playwright", "requests": "requests"}
-
-    # Add gspread if Google Sheets is configured
-    try:
-        config = load_config()
-        if config.get("google_sheet_id"):
-            deps["gspread"] = "gspread"
-    except Exception:
-        # Config might not exist on first run
-        pass
-
-    for module, package in deps.items():
-        try:
-            __import__(module)
-        except ImportError:
-            logger.info(f"Installing {package}...")
-            try:
-                subprocess.check_call(
-                    [sys.executable, "-m", "pip", "install", "-q", "--user", package]
-                )
-            except subprocess.CalledProcessError:
-                subprocess.check_call(
-                    [sys.executable, "-m", "pip", "install", "-q", "--break-system-packages", package]
-                )
-
-    # Ensure playwright browsers are installed
-    try:
-        from playwright.sync_api import sync_playwright
-        with sync_playwright() as p:
-            try:
-                p.chromium.launch(headless=True).close()
-            except Exception:
-                logger.info("Installing Playwright Chromium browser...")
-                subprocess.check_call([sys.executable, "-m", "playwright", "install", "chromium"])
-    except Exception as e:
-        logger.warning(f"Playwright browser check failed: {e}")
 
 
 def load_config():
@@ -398,9 +359,6 @@ def main():
 
     # Load config
     config = load_config()
-
-    # Ensure dependencies
-    ensure_dependencies()
 
     # Get today's date
     date_str = datetime.now().strftime("%Y-%m-%d")

@@ -21,22 +21,25 @@ if [[ -f "$RUN_LOG" ]]; then
   fi
 fi
 
+PYTHON=/opt/homebrew/bin/python3
+
 start_ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 local_date=$(date +"%Y-%m-%d")
 
-{
-  echo "[$(date +"%Y-%m-%d %H:%M:%S %Z")] Starting GovDrugStats (trumprx.gov) scrape"
-  python3 -c "import runpy; runpy.run_path('scripts/scrape_drugs.py', run_name='__main__')"
-  echo "[$(date +"%Y-%m-%d %H:%M:%S %Z")] Scrape completed successfully"
-} >> "$RUN_LOG" 2>&1 && {
+echo "[$(date +"%Y-%m-%d %H:%M:%S %Z")] Starting GovDrugStats (trumprx.gov) scrape" >> "$RUN_LOG" 2>&1
+"$PYTHON" -c "import runpy; runpy.run_path('scripts/scrape_drugs.py', run_name='__main__')" >> "$RUN_LOG" 2>&1 && SCRAPE_EXIT=0 || SCRAPE_EXIT=$?
+
+if [[ $SCRAPE_EXIT -eq 0 ]]; then
+  echo "[$(date +"%Y-%m-%d %H:%M:%S %Z")] Scrape completed successfully" >> "$RUN_LOG"
   cat > "$STATUS_FILE" <<EOJSON
 {"date":"$local_date","start":"$start_ts","status":"success","error":null}
 EOJSON
   exit 0
-}
-
-err="Scrape failed. See $RUN_LOG"
-cat > "$STATUS_FILE" <<EOJSON
+else
+  echo "[$(date +"%Y-%m-%d %H:%M:%S %Z")] Scrape FAILED (exit $SCRAPE_EXIT)" >> "$RUN_LOG"
+  err="Scrape failed with exit $SCRAPE_EXIT. See $RUN_LOG"
+  cat > "$STATUS_FILE" <<EOJSON
 {"date":"$local_date","start":"$start_ts","status":"failure","error":"$err"}
 EOJSON
-exit 1
+  exit 1
+fi

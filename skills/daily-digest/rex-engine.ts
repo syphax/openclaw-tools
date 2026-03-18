@@ -67,6 +67,9 @@ interface DeliveryStatus {
     whatsapp: ChannelStatus;
     telegram: ChannelStatus;
   };
+  alerts?: {
+    telegram?: ChannelStatus;
+  };
   overallOk: boolean;
 }
 
@@ -394,6 +397,15 @@ function runOpenclawMessage(channel: 'whatsapp' | 'telegram', target: string, bo
   };
 }
 
+function isGmailAuthExpired(status: ChannelStatus): boolean {
+  const haystack = `${status.stderr || ''}\n${status.error || ''}`;
+  return /invalid_grant|expired or revoked|expired|revoked/i.test(haystack);
+}
+
+function sendTelegramAlert(body: string): ChannelStatus {
+  return runOpenclawMessage('telegram', addressCfg.telegramChatId, body);
+}
+
 function deliverEmail(subject: string, htmlBody: string): ChannelStatus {
   if (!RESOLVED_GOG_KEYRING_PASSWORD) {
     return { ok: false, error: 'Missing GOG_KEYRING_PASSWORD in env/credentials.' };
@@ -452,6 +464,7 @@ async function main() {
     synthesize: { ok: false },
     email: { ok: false },
     mobile: { whatsapp: { ok: false }, telegram: { ok: false } },
+    alerts: {},
     overallOk: false,
   };
 
@@ -481,40 +494,45 @@ async function main() {
 
     console.log('\n📝 Content formatted for all channels.');
 
-    // Step 5: Deliver email first
+    // Step 5: Deliver to all channels independently
     status.email = deliverEmail(emailSubject, emailBody);
 
-    // Only proceed to mobile if email succeeded
-    if (status.email.ok) {
-      console.log('\n📱 Email succeeded, proceeding to mobile delivery...');
+    console.log('\n📱 Proceeding to mobile delivery regardless of email status...');
+    const whatsappStatus = runOpenclawMessage('whatsapp', addressCfg.phoneWhatsapp, whatsappBody);
+    const telegramStatus = runOpenclawMessage('telegram', addressCfg.telegramChatId, telegramBody);
 
-      const whatsappStatus = runOpenclawMessage('whatsapp', addressCfg.phoneWhatsapp, whatsappBody);
-      const telegramStatus = runOpenclawMessage('telegram', addressCfg.telegramChatId, telegramBody);
+    if (whatsappStatus.ok) console.log('  ✅ WhatsApp message sent.');
+    else console.error('  ❌ WhatsApp delivery failed:', whatsappStatus.stderr || whatsappStatus.error);
 
-      if (whatsappStatus.ok) console.log('  ✅ WhatsApp message sent.');
-      else console.error('  ❌ WhatsApp delivery failed:', whatsappStatus.stderr || whatsappStatus.error);
+    if (telegramStatus.ok) console.log('  ✅ Telegram message sent.');
+    else console.error('  ❌ Telegram delivery failed:', telegramStatus.stderr || telegramStatus.error);
 
-      if (telegramStatus.ok) console.log('  ✅ Telegram message sent.');
-      else console.error('  ❌ Telegram delivery failed:', telegramStatus.stderr || telegramStatus.error);
+    status.mobile = { whatsapp: whatsappStatus, telegram: telegramStatus };
 
-      status.mobile = { whatsapp: whatsappStatus, telegram: telegramStatus };
-    } else {
-      console.error('\n❌ Email delivery failed, skipping mobile delivery.');
-      status.mobile = {
-        whatsapp: { ok: false, error: 'Skipped due to email failure' },
-        telegram: { ok: false, error: 'Skipped due to email failure' },
-      };
+    // Step 6: Alert on Gmail auth expiry/revocation
+    if (!status.email.ok && isGmailAuthExpired(status.email)) {
+      const alertBody = [
+        '⚠️ Daily Digest email auth failed.',
+        `Date: ${date}`,
+        'Reason: Gmail token expired or was revoked.',
+        'Digest mobile delivery was attempted separately.',
+        'Action needed: re-auth gog Gmail before the next run.',
+      ].join('\n');
+      const alertStatus = sendTelegramAlert(alertBody);
+      status.alerts = { ...(status.alerts || {}), telegram: alertStatus };
+      if (alertStatus.ok) console.log('  ✅ Telegram auth alert sent.');
+      else console.error('  ❌ Telegram auth alert failed:', alertStatus.stderr || alertStatus.error);
     }
 
-    status.overallOk = status.synthesize.ok && status.email.ok;
+    status.overallOk = status.synthesize.ok && (status.email.ok || status.mobile.whatsapp.ok || status.mobile.telegram.ok);
     writeDeliveryStatus(status);
 
-    if (!status.email.ok) {
-      console.error('\n❌ Email delivery failed. Failing hard.');
+    if (!status.email.ok || !status.mobile.whatsapp.ok || !status.mobile.telegram.ok) {
+      console.error('\n❌ One or more delivery channels failed.');
       process.exit(1);
     }
 
-    console.log('\n🦖 Daily Digest complete and delivered!');
+    console.log('\n🦖 Daily Digest complete and delivered on all channels!');
     process.exit(0);
   } catch (error: any) {
     console.error('❌ Synthesis/Delivery failed:', error.message);

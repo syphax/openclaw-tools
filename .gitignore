@@ -245,3 +245,5 @@ skills/govrx/debug/*
 skills/govrx/cfg/*
 skills/govrx/logs/last-run-status-costplus.json
 skills/stop-election-texts/cfg/config.json
+skills/daily-digest/logs/*.png
+skills/daily-digest/debug/* 

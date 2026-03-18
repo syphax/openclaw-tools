@@ -32,6 +32,8 @@ fi
 
 start_ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 local_date=$(date +"%Y-%m-%d")
+current_tz=$(readlink /etc/localtime 2>/dev/null | sed 's#^.*/zoneinfo/##' || echo "unknown")
+expected_tz="America/New_York"
 
 # Idempotency guard: skip if already delivered successfully today
 if [[ -f "$STATUS_FILE" ]] && \
@@ -41,19 +43,29 @@ if [[ -f "$STATUS_FILE" ]] && \
   exit 0
 fi
 
+set +e
 {
   echo "[$(date +"%Y-%m-%d %H:%M:%S %Z")] Starting Daily Digest"
+  echo "[$(date +"%Y-%m-%d %H:%M:%S %Z")] Host timezone: ${current_tz} (expected ${expected_tz})"
+  if [[ "$current_tz" != "$expected_tz" ]]; then
+    echo "[$(date +"%Y-%m-%d %H:%M:%S %Z")] WARNING: Host timezone mismatch may shift launchd schedule."
+  fi
   npx tsx daily-digest.ts
-  echo "[$(date +"%Y-%m-%d %H:%M:%S %Z")] Daily Digest completed successfully"
-} >> "$RUN_LOG" 2>&1 && {
+}
+run_exit=$?
+set -e
+
+if [[ $run_exit -eq 0 ]]; then
+  echo "[$(date +"%Y-%m-%d %H:%M:%S %Z")] Daily Digest completed successfully" >> "$RUN_LOG"
   cat > "$STATUS_FILE" <<EOJSON
 {"date":"$local_date","start":"$start_ts","status":"success","error":null}
 EOJSON
   exit 0
-}
+fi
 
-err="Daily Digest failed. See $RUN_LOG"
+echo "[$(date +"%Y-%m-%d %H:%M:%S %Z")] Daily Digest failed (exit $run_exit)" >> "$RUN_LOG"
+err="Daily Digest failed with exit $run_exit. See $RUN_LOG"
 cat > "$STATUS_FILE" <<EOJSON
 {"date":"$local_date","start":"$start_ts","status":"failure","error":"$err"}
 EOJSON
-exit 1
+exit $run_exit
