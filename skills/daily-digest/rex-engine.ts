@@ -102,6 +102,40 @@ interface ProcessedDigestData {
   };
 }
 
+function mergeDeterministicSportsSection(emailBody: string, sportsHtml: string): string {
+  const sportsHeaderRegex = /<h2[^>]*>\s*Sports Desk\s*<\/h2>/i;
+  const match = emailBody.match(sportsHeaderRegex);
+
+  if (!match || match.index === undefined) {
+    return `${emailBody}\n<h2>Sports Desk</h2>\n${sportsHtml}`;
+  }
+
+  const start = match.index;
+  const header = match[0];
+  const afterHeaderIndex = start + header.length;
+  const remainder = emailBody.slice(afterHeaderIndex);
+  const nextSectionMatch = remainder.match(/<h2[^>]*>/i);
+  const sectionEnd = nextSectionMatch && nextSectionMatch.index !== undefined
+    ? afterHeaderIndex + nextSectionMatch.index
+    : emailBody.length;
+
+  const existingSectionBody = emailBody.slice(afterHeaderIndex, sectionEnd).trim();
+  let introHtml = '';
+
+  if (existingSectionBody) {
+    const introMatch = existingSectionBody.match(/^(<p>[\s\S]*?<\/p>)/i);
+    if (introMatch) {
+      introHtml = introMatch[1].trim();
+    }
+  }
+
+  const replacementBody = introHtml
+    ? `${introHtml}\n${sportsHtml}`
+    : sportsHtml;
+
+  return `${emailBody.slice(0, start)}${header}\n${replacementBody}${emailBody.slice(sectionEnd)}`;
+}
+
 /**
  * Pre-process raw data with deterministic balancing and formatting.
  * This enforces structure BEFORE the LLM sees it, allowing the LLM
@@ -335,15 +369,15 @@ ${JSON.stringify(processedData, null, 2)}
 
 3. **Sports Desk:**
    - The sports text is ALREADY FULLY FORMATTED in 'sportsSection.email'.
-   - Your task: Add ONLY a 1-2 sentence headline/intro for context.
-   - DO NOT touch the pre-formatted results.
-   - DO NOT reformat, restructure, or modify the existing sports text.
-   - Just add your brief intro, then include the full pre-formatted section verbatim.
+   - Your task: Write ONLY a 1-2 sentence intro for context.
+   - DO NOT include sports results, scores, upcoming fixtures, quiet teams, bullets, or lists.
+   - DO NOT rewrite or restate the sports data.
+   - The code will inject the sports block after your intro.
 
 ### OUTPUT FORMAT:
 Return ONLY valid JSON (no markdown, no extra text):
 {
-  "email_body": "Full digest in HTML with <h2> section headers and your commentary",
+  "email_body": "Full digest in HTML with <h2> section headers and your commentary. For Sports Desk include only the <h2>Sports Desk</h2> header and a short intro paragraph.",
   "commentary_notes": "Brief internal notes on themes (optional)"
 }
 
@@ -487,8 +521,11 @@ async function main() {
     const emailSubject = generateEmailSubject(date);
     console.log(`📧 Email subject: ${emailSubject}`);
 
-    // Step 4: Format for different channels
-    const emailBody = llmResult.email_body;
+    // Step 4: Merge deterministic sports formatting back into the LLM output
+    const emailBody = mergeDeterministicSportsSection(
+      llmResult.email_body,
+      processedData.sportsSection.email,
+    );
     const whatsappBody = formatForWhatsApp(emailBody);
     const telegramBody = formatForTelegram(emailBody);
 
