@@ -5,7 +5,6 @@ import { spawnSync } from 'child_process';
 import {
   balanceHuntContent,
   balanceRedditContent,
-  formatTelegramLink,
   generateEmailSubject,
   logBalanceStats,
 } from './digest-utils.js';
@@ -13,6 +12,14 @@ import {
   buildSportsSection,
   type RawMatch,
 } from './sports-engine.js';
+import {
+  type StructuredLlmOutput,
+  validateStructuredOutput,
+  renderEmailHtml,
+  renderWhatsAppText,
+  renderTelegramText,
+  buildFallbackOutput,
+} from './digest-renderer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -85,7 +92,7 @@ function writeDeliveryStatus(status: DeliveryStatus) {
   console.log(`🧾 Delivery status written: ${outPath}`);
 }
 
-interface ProcessedDigestData {
+export interface ProcessedDigestData {
   date: string;
   huntData: {
     selected: any[];
@@ -102,39 +109,6 @@ interface ProcessedDigestData {
   };
 }
 
-function mergeDeterministicSportsSection(emailBody: string, sportsHtml: string): string {
-  const sportsHeaderRegex = /<h2[^>]*>\s*Sports Desk\s*<\/h2>/i;
-  const match = emailBody.match(sportsHeaderRegex);
-
-  if (!match || match.index === undefined) {
-    return `${emailBody}\n<h2>Sports Desk</h2>\n${sportsHtml}`;
-  }
-
-  const start = match.index;
-  const header = match[0];
-  const afterHeaderIndex = start + header.length;
-  const remainder = emailBody.slice(afterHeaderIndex);
-  const nextSectionMatch = remainder.match(/<h2[^>]*>/i);
-  const sectionEnd = nextSectionMatch && nextSectionMatch.index !== undefined
-    ? afterHeaderIndex + nextSectionMatch.index
-    : emailBody.length;
-
-  const existingSectionBody = emailBody.slice(afterHeaderIndex, sectionEnd).trim();
-  let introHtml = '';
-
-  if (existingSectionBody) {
-    const introMatch = existingSectionBody.match(/^(<p>[\s\S]*?<\/p>)/i);
-    if (introMatch) {
-      introHtml = introMatch[1].trim();
-    }
-  }
-
-  const replacementBody = introHtml
-    ? `${introHtml}\n${sportsHtml}`
-    : sportsHtml;
-
-  return `${emailBody.slice(0, start)}${header}\n${replacementBody}${emailBody.slice(sectionEnd)}`;
-}
 
 /**
  * Pre-process raw data with deterministic balancing and formatting.
@@ -185,32 +159,6 @@ function preprocessDigestData(rawData: any): ProcessedDigestData {
   };
 }
 
-/**
- * Format the digest for WhatsApp.
- * WhatsApp doesn't support markdown links - it auto-linkifies plain URLs.
- * So we output plain clickable URLs only (no label prefix).
- */
-function formatForWhatsApp(emailBody: string): string {
-  // Convert HTML links to plain URLs only
-  // Pattern: <a href="url">text</a> -> url
-  return emailBody.replace(/<a href="([^"]+)">([^<]+)<\/a>/g, (_, url) => {
-    return url; // Just the URL, WhatsApp will auto-linkify
-  }).replace(/<br\s*\/?>/g, '\n')
-    .replace(/<\/?[^>]+(>|$)/g, ''); // Strip remaining HTML tags
-}
-
-/**
- * Format the digest for Telegram.
- * Telegram supports markdown-style links.
- */
-function formatForTelegram(emailBody: string): string {
-  // Convert HTML links to markdown format
-  // Pattern: <a href="url">text</a> -> [text](url)
-  return emailBody.replace(/<a href="([^"]+)">([^<]+)<\/a>/g, (_, url, text) => {
-    return formatTelegramLink(text, url);
-  }).replace(/<br\s*\/?>/g, '\n')
-    .replace(/<\/?[^>]+(>|$)/g, ''); // Strip remaining HTML tags
-}
 
 /**
  * Extract first valid JSON object from potentially noisy LLM output.
@@ -246,25 +194,6 @@ function extractJsonFromResponse(content: string): any {
   }
 
   throw new Error('Could not extract valid JSON from response');
-}
-
-/**
- * Validate that LLM response contains required fields.
- */
-function validateLlmResponse(parsed: any): void {
-  if (!parsed || typeof parsed !== 'object') {
-    throw new Error('LLM response is not an object');
-  }
-
-  if (!parsed.email_body || typeof parsed.email_body !== 'string') {
-    throw new Error('LLM response missing required field: email_body');
-  }
-
-  if (parsed.email_body.trim().length < 50) {
-    throw new Error('LLM response email_body is too short (likely malformed)');
-  }
-
-  console.log('✅ LLM response validation passed');
 }
 
 function getLlmConfig(): { url: string; apiKey: string | undefined; model: string; extraHeaders: Record<string, string> } {
@@ -329,91 +258,123 @@ async function callLlmApi(prompt: string, attemptNum: number): Promise<any> {
   return content;
 }
 
-async function synthesize(_rawData: any, processedData: ProcessedDigestData) {
+/**
+ * Build the LLM prompt requesting structured JSON output.
+ * The LLM provides ONLY commentary — all formatting is code-controlled.
+ */
+function buildStructuredPrompt(processedData: ProcessedDigestData): string {
+  // Build a compact data summary for the LLM (strip sports section text to save tokens)
+  const llmData = {
+    date: processedData.date,
+    huntItems: processedData.huntData.selected.map((item: any, i: number) => ({
+      index: i,
+      platform: item.platform,
+      title: (item.title || item.content || '').slice(0, 200),
+      author: item.author || item.subreddit || 'Unknown',
+      url: item.externalUrl || item.url || '',
+      keyword: item.keyword || item.subreddit || '',
+    })),
+    pulseItems: processedData.pulseData.selected.map((item: any, i: number) => ({
+      index: i,
+      title: (item.title || '').slice(0, 200),
+      subreddit: item.subreddit || '',
+      upvotes: item.upvotes || 0,
+      url: item.url || '',
+    })),
+    sportsSummary: processedData.sportsSection.stats,
+  };
+
+  return `You are Rex, an insight-hungry AI curator. Return ONLY structured JSON — no HTML, no markdown, no formatting.
+
+The code handles ALL formatting. You provide ONLY commentary text.
+
+### DATA:
+${JSON.stringify(llmData, null, 2)}
+
+### TASKS:
+
+1. **hunt_items**: For EACH item in huntItems (by index), write 1-2 plain-text sentences explaining WHY it matters. No links, no HTML, no formatting — just the insight.
+
+2. **pulse_vibes**: Identify 2-3 thematic VIBES or TRENDS across the pulse threads. For each vibe:
+   - "theme": Short title (3-6 words)
+   - "summary": 2-3 plain-text sentences on what's happening and why it matters
+   - "thread_indices": Array of indices (from pulseItems) that relate to this vibe
+
+3. **sports_intro**: 1-2 plain-text sentences of sports context. Do NOT include scores, results, or fixtures — the code adds those.
+
+4. **closing_note**: Optional 1-sentence sign-off thought. Can be empty string.
+
+### OUTPUT:
+Return ONLY this exact JSON structure:
+{
+  "hunt_items": [
+    { "index": 0, "commentary": "Plain text insight..." },
+    { "index": 1, "commentary": "Plain text insight..." }
+  ],
+  "pulse_vibes": [
+    {
+      "theme": "Short Theme Title",
+      "summary": "Plain text summary of the vibe...",
+      "thread_indices": [0, 3, 7]
+    }
+  ],
+  "sports_intro": "Plain text sports context...",
+  "closing_note": "Optional sign-off..."
+}
+
+RULES:
+- Every hunt item index must have a corresponding entry in hunt_items
+- commentary/summary must be plain text only — NO HTML, NO markdown, NO links
+- thread_indices must reference valid indices from pulseItems
+- Keep commentary concise: max 2 sentences per hunt item, max 3 per vibe summary`;
+}
+
+async function synthesize(processedData: ProcessedDigestData): Promise<StructuredLlmOutput> {
   const llmCfgCheck = getLlmConfig();
   if (!llmCfgCheck.apiKey) {
     const keyName = LLM_PROVIDER === 'openai' ? 'OPENAI_API_KEY' : 'OPENROUTER_API_KEY';
     throw new Error(`${keyName} not found in environment (provider: ${LLM_PROVIDER}).`);
   }
 
-  console.log('\n🤖 Sending to LLM for commentary and synthesis...');
+  console.log('\n🤖 Sending to LLM for structured commentary...');
 
-  const prompt = `
-You are Rex, an insight-hungry AI curator. Your SOLE role is COLOR COMMENTARY on pre-structured content.
-
-🚨 CRITICAL: You are NOT responsible for:
-- Structure or formatting (already done deterministically in code)
-- Link formatting (already handled)
-- Section organization (already decided)
-- Item selection (already balanced)
-
-Your ONLY job is to add INSIGHTFUL COMMENTARY and CONTEXT to existing structure.
-
-### PRE-PROCESSED DATA:
-${JSON.stringify(processedData, null, 2)}
-
-### YOUR TASKS:
-
-1. **Keyword Search Roundup:**
-   - Items in 'huntData.selected' are PRE-SELECTED and PRE-BALANCED.
-   - For EACH item: Write 1-2 sentences explaining WHY it matters to Brian.
-   - Format: Use HTML <a> tags for links.
-   - Prefix: [LI] for LinkedIn, [R] for Reddit.
-   - Structure: [Platform] Title by Author/Subreddit - Your commentary. <a href="url">View post</a>
-
-2. **Reddit Pulse:**
-   - Items in 'pulseData.selected' are PRE-SELECTED and PRE-BALANCED.
-   - Identify 2-3 thematic VIBES or TRENDS across discussions.
-   - Reference specific threads with HTML <a> tags using post titles.
-   - Focus on: WHAT'S HAPPENING and WHY IT MATTERS.
-
-3. **Sports Desk:**
-   - The sports text is ALREADY FULLY FORMATTED in 'sportsSection.email'.
-   - Your task: Write ONLY a 1-2 sentence intro for context.
-   - DO NOT include sports results, scores, upcoming fixtures, quiet teams, bullets, or lists.
-   - DO NOT rewrite or restate the sports data.
-   - The code will inject the sports block after your intro.
-
-### OUTPUT FORMAT:
-Return ONLY valid JSON (no markdown, no extra text):
-{
-  "email_body": "Full digest in HTML with <h2> section headers and your commentary. For Sports Desk include only the <h2>Sports Desk</h2> header and a short intro paragraph.",
-  "commentary_notes": "Brief internal notes on themes (optional)"
-}
-
-REMINDER: Your role is COMMENTARY ONLY. Structure is handled by code.
-`;
-
+  const prompt = buildStructuredPrompt(processedData);
   const MAX_RETRIES = 3;
   let lastError: Error | null = null;
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       const content = await callLlmApi(prompt, attempt);
-
-      // Try to parse and validate
       const parsed = extractJsonFromResponse(content);
-      validateLlmResponse(parsed);
 
-      console.log('✅ LLM synthesis complete and validated');
-      return parsed;
+      // Validate structured output
+      const validation = validateStructuredOutput(parsed, processedData);
+      if (!validation.valid) {
+        throw new Error(`Structured validation failed: ${validation.errors.join('; ')}`);
+      }
+      if (validation.warnings.length > 0) {
+        console.warn(`  ⚠️  Validation warnings: ${validation.warnings.join('; ')}`);
+      }
+
+      console.log('✅ LLM structured output validated');
+      return parsed as StructuredLlmOutput;
 
     } catch (e: any) {
       lastError = e;
       console.warn(`  ⚠️  Attempt ${attempt} failed: ${e.message}`);
 
       if (attempt < MAX_RETRIES) {
-        const delay = 1000 * attempt; // Exponential backoff: 1s, 2s, 3s
+        const delay = 1000 * attempt;
         console.log(`  ⏳ Retrying in ${delay}ms...`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
   }
 
-  // All retries exhausted
-  throw new Error(
-    `LLM synthesis failed after ${MAX_RETRIES} attempts. Last error: ${lastError?.message || 'unknown'}`
-  );
+  // All retries failed — use fallback
+  console.error(`❌ LLM failed after ${MAX_RETRIES} attempts: ${lastError?.message}`);
+  console.log('🔄 Using fallback renderer (no LLM commentary)...');
+  return buildFallbackOutput(processedData);
 }
 
 function runOpenclawMessage(channel: 'whatsapp' | 'telegram', target: string, body: string): ChannelStatus {
@@ -485,8 +446,6 @@ function deliverEmail(subject: string, htmlBody: string): ChannelStatus {
   return status;
 }
 
-// Removed deliverMobile function - now handled in main() with separate formatting
-
 async function main() {
   const date = new Date().toISOString().split('T')[0];
   const outputDir = path.join(process.env.HOME || '', '.openclaw/data/social-searcher');
@@ -513,23 +472,20 @@ async function main() {
     // Step 1: Pre-process with deterministic logic
     const processedData = preprocessDigestData(rawData);
 
-    // Step 2: LLM adds commentary
-    const llmResult = await synthesize(rawData, processedData);
+    // Step 2: LLM returns structured commentary (falls back to no-commentary on failure)
+    const structuredOutput = await synthesize(processedData);
     status.synthesize = { ok: true };
 
     // Step 3: Generate email subject with enforced format
     const emailSubject = generateEmailSubject(date);
     console.log(`📧 Email subject: ${emailSubject}`);
 
-    // Step 4: Merge deterministic sports formatting back into the LLM output
-    const emailBody = mergeDeterministicSportsSection(
-      llmResult.email_body,
-      processedData.sportsSection.email,
-    );
-    const whatsappBody = formatForWhatsApp(emailBody);
-    const telegramBody = formatForTelegram(emailBody);
+    // Step 4: Deterministic rendering — code controls ALL formatting
+    const emailBody = renderEmailHtml(structuredOutput, processedData);
+    const whatsappBody = renderWhatsAppText(structuredOutput, processedData);
+    const telegramBody = renderTelegramText(structuredOutput, processedData);
 
-    console.log('\n📝 Content formatted for all channels.');
+    console.log('\n📝 Content rendered deterministically for all channels.');
 
     // Step 5: Deliver to all channels independently
     status.email = deliverEmail(emailSubject, emailBody);

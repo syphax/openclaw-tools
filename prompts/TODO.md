@@ -1,9 +1,14 @@
+# TO-DO List
 
-Header of keyword search keeps changing, but not to what I want it to be!
-It's currently: OpenClaw AI Agent Adventures
+## Appointment maker
 
-That section should be in bullet form, not paragraph
+I sent a brief request to add something to the calendar; OC makes an event and figures out the details.
 
-Pulse: I want a couple sentences, then a list of links to relevant posts
+## Network manager
+
+Manage my networking. Prompt me to contact people. Keep track of contacts.
+
+## Daily Digest
 
 (Just remember: if you ever upgrade Node via nvm, re-run skills/daily-digest/setup_launchd.sh to update the injected PATH in the installed plists.)
+

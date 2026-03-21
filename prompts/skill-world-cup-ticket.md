@@ -128,3 +128,8 @@ A: Not sure. If we add here, can we do so in a way that will still run if the fi
 CC: On scheduling (Q6): I'd recommend two separate cron entries rather than combining them in run_daily_4am.sh. The current shell script uses set -euo pipefail — restructuring it to isolate failures between two scripts adds complexity with little benefit. Two independent cron jobs are simpler, easier to monitor separately, and completely isolated from each other's failures.
 
 A: OK; please add a separate cron entry for the new script.
+
+# ADDENDUM
+
+I want to add price tracking for SeatGeek (https://seatgeek.com/fifa-world-cup-tickets).
+
