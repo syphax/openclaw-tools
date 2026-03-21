@@ -227,7 +227,8 @@ export function renderEmailHtml(
 
       let block = `<h3>${escapeHtml(vibe.theme)}</h3>\n${summaryHtml}`;
       if (refs.length > 0) {
-        block += `\n<p><em>Threads:</em> ${refs.join(' · ')}</p>`;
+        const refItems = refs.map(r => `<li>${r}</li>`).join('\n');
+        block += `\n<p><em>Threads:</em></p>\n<ul>\n${refItems}\n</ul>`;
       }
       vibeBlocks.push(block);
     }

@@ -492,7 +492,38 @@ async function main() {
 
     console.log('\n📱 Proceeding to mobile delivery regardless of email status...');
     const whatsappStatus = runOpenclawMessage('whatsapp', addressCfg.phoneWhatsapp, whatsappBody);
-    const telegramStatus = runOpenclawMessage('telegram', addressCfg.telegramChatId, telegramBody);
+
+    // Telegram has a 4096-char limit — chunk on section separators if needed
+    const TELEGRAM_LIMIT = 4096;
+    let telegramStatus: ChannelStatus;
+    if (telegramBody.length <= TELEGRAM_LIMIT) {
+      telegramStatus = runOpenclawMessage('telegram', addressCfg.telegramChatId, telegramBody);
+    } else {
+      console.log(`  📏 Telegram body ${telegramBody.length} chars > ${TELEGRAM_LIMIT} limit, sending in chunks...`);
+      const sections = telegramBody.split('\n\n———\n\n');
+      const chunks: string[] = [];
+      let current = '';
+      for (const section of sections) {
+        const candidate = current ? current + '\n\n———\n\n' + section : section;
+        if (candidate.length > TELEGRAM_LIMIT && current) {
+          chunks.push(current);
+          current = section;
+        } else {
+          current = candidate;
+        }
+      }
+      if (current) chunks.push(current);
+
+      telegramStatus = { ok: true };
+      for (let i = 0; i < chunks.length; i++) {
+        const chunkStatus = runOpenclawMessage('telegram', addressCfg.telegramChatId, chunks[i]);
+        if (!chunkStatus.ok) {
+          telegramStatus = chunkStatus;
+          break;
+        }
+      }
+      if (telegramStatus.ok) console.log(`  📨 Sent Telegram in ${chunks.length} chunks.`);
+    }
 
     if (whatsappStatus.ok) console.log('  ✅ WhatsApp message sent.');
     else console.error('  ❌ WhatsApp delivery failed:', whatsappStatus.stderr || whatsappStatus.error);
