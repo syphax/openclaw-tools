@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { spawnSync } from 'child_process';
+import { spawnSync, execSync } from 'child_process';
 import {
   balanceHuntContent,
   balanceRedditContent,
@@ -378,6 +378,8 @@ async function synthesize(processedData: ProcessedDigestData): Promise<Structure
 }
 
 function runOpenclawMessage(channel: 'whatsapp' | 'telegram', target: string, body: string): ChannelStatus {
+  console.log(`  📤 openclaw message send --channel ${channel} --target ${target.slice(0, 6)}... (${body.length} chars)`);
+
   const oc = spawnSync(
     'openclaw',
     ['message', 'send', '--channel', channel, '--target', target, '--message', body],
@@ -390,6 +392,11 @@ function runOpenclawMessage(channel: 'whatsapp' | 'telegram', target: string, bo
     stderr: oc.stderr?.toString(),
     error: oc.status === 0 ? undefined : `openclaw message send failed (exit ${oc.status})`,
   };
+}
+
+function isWhatsAppListenerDown(status: ChannelStatus): boolean {
+  const haystack = `${status.stderr || ''}\n${status.error || ''}`;
+  return /No active WhatsApp Web listener/i.test(haystack);
 }
 
 function isGmailAuthExpired(status: ChannelStatus): boolean {
@@ -467,6 +474,18 @@ async function main() {
     }
 
     console.log(`\n🦖 Rex Engine starting for ${date}...`);
+
+    // Runtime diagnostics — prove which code path is active
+    const entryFile = fileURLToPath(import.meta.url);
+    const isSource = entryFile.endsWith('.ts');
+    let gitHash = 'unknown';
+    try { gitHash = execSync('git rev-parse --short HEAD', { cwd: __dirname }).toString().trim(); } catch {}
+    console.log(`  📍 Entrypoint: ${entryFile}`);
+    console.log(`  📍 Runtime: ${isSource ? 'tsx (source)' : 'node (dist)'}`);
+    console.log(`  📍 Git: ${gitHash}`);
+    console.log(`  📍 Renderer: digest-renderer.ts (structured JSON → deterministic output)`);
+    console.log(`  📍 Telegram chunking: enabled (limit 4096)`);
+
     const rawData = JSON.parse(fs.readFileSync(rawDataPath, 'utf-8'));
 
     // Step 1: Pre-process with deterministic logic
@@ -533,31 +552,52 @@ async function main() {
 
     status.mobile = { whatsapp: whatsappStatus, telegram: telegramStatus };
 
-    // Step 6: Alert on Gmail auth expiry/revocation
+    // Step 6: Alerts for auth/listener failures (sent via Telegram)
+    const alertLines: string[] = [];
+
     if (!status.email.ok && isGmailAuthExpired(status.email)) {
-      const alertBody = [
+      alertLines.push(
         '⚠️ Daily Digest email auth failed.',
-        `Date: ${date}`,
         'Reason: Gmail token expired or was revoked.',
-        'Digest mobile delivery was attempted separately.',
-        'Action needed: re-auth gog Gmail before the next run.',
-      ].join('\n');
-      const alertStatus = sendTelegramAlert(alertBody);
-      status.alerts = { ...(status.alerts || {}), telegram: alertStatus };
-      if (alertStatus.ok) console.log('  ✅ Telegram auth alert sent.');
-      else console.error('  ❌ Telegram auth alert failed:', alertStatus.stderr || alertStatus.error);
+        'Action: re-auth gog Gmail before the next run.',
+      );
     }
 
+    if (!whatsappStatus.ok && isWhatsAppListenerDown(whatsappStatus)) {
+      alertLines.push(
+        '⚠️ WhatsApp Web listener is disconnected.',
+        'Action: openclaw channels login --channel whatsapp',
+      );
+    }
+
+    if (alertLines.length > 0 && telegramStatus.ok) {
+      const alertBody = [`Date: ${date}`, '', ...alertLines].join('\n');
+      const alertStatus = sendTelegramAlert(alertBody);
+      status.alerts = { ...(status.alerts || {}), telegram: alertStatus };
+      if (alertStatus.ok) console.log('  ✅ Telegram alert sent for auth/listener issues.');
+      else console.error('  ❌ Telegram alert failed:', alertStatus.stderr || alertStatus.error);
+    }
+
+    // Overall success: synthesis worked + at least one delivery channel succeeded
     status.overallOk = status.synthesize.ok && (status.email.ok || status.mobile.whatsapp.ok || status.mobile.telegram.ok);
     writeDeliveryStatus(status);
 
-    if (!status.email.ok || !status.mobile.whatsapp.ok || !status.mobile.telegram.ok) {
-      console.error('\n❌ One or more delivery channels failed.');
-      process.exit(1);
+    const failedChannels: string[] = [];
+    if (!status.email.ok) failedChannels.push('email');
+    if (!status.mobile.whatsapp.ok) failedChannels.push('whatsapp');
+    if (!status.mobile.telegram.ok) failedChannels.push('telegram');
+
+    if (failedChannels.length > 0 && failedChannels.length < 3) {
+      console.warn(`\n⚠️  Partial delivery — failed: ${failedChannels.join(', ')}`);
     }
 
-    console.log('\n🦖 Daily Digest complete and delivered on all channels!');
-    process.exit(0);
+    if (status.overallOk) {
+      console.log('\n🦖 Daily Digest delivered successfully.');
+      process.exit(0);
+    } else {
+      console.error('\n❌ All delivery channels failed.');
+      process.exit(1);
+    }
   } catch (error: any) {
     console.error('❌ Synthesis/Delivery failed:', error.message);
     status.synthesize = { ok: false, error: error.message };

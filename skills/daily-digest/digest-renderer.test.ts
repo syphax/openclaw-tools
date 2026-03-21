@@ -178,7 +178,9 @@ runTest('email: hunt items are bulleted list', () => {
   const html = renderEmailHtml(makeLlmOutput(), makeProcessedData());
   assert(html.includes('<ul>'), 'Missing <ul>');
   assert(html.includes('<li>'), 'Missing <li>');
-  assert((html.match(/<li>/g) || []).length === 2, 'Expected 2 list items');
+  // Hunt section has 2 items; pulse vibes also produce <li> for thread refs
+  const huntSection = html.split('<h2>Reddit Pulse</h2>')[0];
+  assert((huntSection.match(/<li>/g) || []).length === 2, 'Expected 2 hunt list items');
 });
 
 runTest('email: contains platform tags', () => {
@@ -208,6 +210,14 @@ runTest('email: pulse vibes have h3 subheaders', () => {
   const html = renderEmailHtml(makeLlmOutput(), makeProcessedData());
   assert(html.includes('<h3>Solar-Agriculture Convergence</h3>'), 'Missing vibe subheader');
   assert(html.includes('<h3>AI in AgTech</h3>'), 'Missing vibe subheader');
+});
+
+runTest('email: pulse thread refs are bulleted list', () => {
+  const html = renderEmailHtml(makeLlmOutput(), makeProcessedData());
+  const pulseSection = html.split('<h2>Reddit Pulse</h2>')[1]?.split('<h2>Sports Desk</h2>')[0] || '';
+  assert(pulseSection.includes('<em>Threads:</em>'), 'Missing Threads label');
+  assert(pulseSection.includes('<ul>'), 'Thread refs should be in <ul>');
+  assert((pulseSection.match(/<li>/g) || []).length >= 2, 'Expected at least 2 thread ref bullets');
 });
 
 runTest('email: closing note rendered', () => {
@@ -338,7 +348,8 @@ runTest('edge: missing commentary for a hunt item still renders', () => {
   // Item 1 has no commentary entry
 
   const html = renderEmailHtml(llm, data);
-  assert((html.match(/<li>/g) || []).length === 2, 'Both items should render');
+  const huntSection = html.split('<h2>Reddit Pulse</h2>')[0];
+  assert((huntSection.match(/<li>/g) || []).length === 2, 'Both items should render');
 });
 
 runTest('edge: invalid thread_indices are skipped gracefully', () => {
