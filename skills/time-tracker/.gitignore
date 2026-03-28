@@ -1,0 +1,7 @@
+node_modules/
+dist/
+public/
+logs/*.log
+logs/arc/
+web/node_modules/
+web/dist/

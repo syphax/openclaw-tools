@@ -1,0 +1,11 @@
+{
+  "defaults": {
+    "work_minutes": 25,
+    "cycle_minutes": 30,
+    "project": "General",
+    "task": "Unspecified"
+  },
+  "port": 3100,
+  "phoneWhatsapp": "+19788530467",
+  "telegramChatId": "7761238474"
+}

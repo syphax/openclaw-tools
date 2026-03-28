@@ -1,0 +1,23 @@
+{
+  "name": "time-tracker",
+  "version": "1.0.0",
+  "description": "Pomodoro-style time tracker for OpenClaw",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "build:web": "cd web && npm run build && cp -r dist ../public"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "duckdb-async": "^1.1.0",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/express": "^5.0.0",
+    "@types/cors": "^2.8.17",
+    "tsx": "^4.21.0",
+    "typescript": "^5.3.0"
+  }
+}
