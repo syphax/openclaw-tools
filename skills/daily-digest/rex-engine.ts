@@ -20,6 +20,7 @@ import {
   renderTelegramText,
   buildFallbackOutput,
 } from './digest-renderer.js';
+import { checkGmailAuth } from './gmail-auth-check.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -475,6 +476,17 @@ async function main() {
 
     console.log(`\n🦖 Rex Engine starting for ${date}...`);
 
+    // Gmail auth preflight check (warn but don't fail)
+    console.log('\n🔐 Running Gmail auth preflight check...');
+    const authCheck = checkGmailAuth();
+    if (!authCheck.ok) {
+      console.warn('⚠️  Gmail auth preflight failed:', authCheck.error);
+      console.warn('⚠️  Email delivery will likely fail, but continuing with other channels...');
+      status.email = { ok: false, error: `Preflight failed: ${authCheck.error}`, stderr: authCheck.stderr };
+    } else {
+      console.log('✅ Gmail auth preflight passed.');
+    }
+
     // Runtime diagnostics — prove which code path is active
     const entryFile = fileURLToPath(import.meta.url);
     const isSource = entryFile.endsWith('.ts');
@@ -506,8 +518,28 @@ async function main() {
 
     console.log('\n📝 Content rendered deterministically for all channels.');
 
-    // Step 5: Deliver to all channels independently
-    status.email = deliverEmail(emailSubject, emailBody);
+    // Step 4b: Preserve rendered artifacts for manual recovery
+    const artifactsDir = path.join(outputDir, 'rendered-artifacts');
+    if (!fs.existsSync(artifactsDir)) fs.mkdirSync(artifactsDir, { recursive: true });
+
+    const emailArtifactPath = path.join(artifactsDir, `email-${date}.html`);
+    const whatsappArtifactPath = path.join(artifactsDir, `whatsapp-${date}.txt`);
+    const telegramArtifactPath = path.join(artifactsDir, `telegram-${date}.txt`);
+    const structuredOutputPath = path.join(artifactsDir, `structured-output-${date}.json`);
+
+    fs.writeFileSync(emailArtifactPath, emailBody);
+    fs.writeFileSync(whatsappArtifactPath, whatsappBody);
+    fs.writeFileSync(telegramArtifactPath, telegramBody);
+    fs.writeFileSync(structuredOutputPath, JSON.stringify(structuredOutput, null, 2));
+
+    console.log(`💾 Rendered artifacts saved to ${artifactsDir}`);
+
+    // Step 5: Deliver to all channels independently (graceful degradation)
+    if (authCheck.ok) {
+      status.email = deliverEmail(emailSubject, emailBody);
+    } else {
+      console.log('⏭️  Skipping email delivery (preflight check failed).');
+    }
 
     console.log('\n📱 Proceeding to mobile delivery regardless of email status...');
     const whatsappStatus = runOpenclawMessage('whatsapp', addressCfg.phoneWhatsapp, whatsappBody);
@@ -582,20 +614,33 @@ async function main() {
     status.overallOk = status.synthesize.ok && (status.email.ok || status.mobile.whatsapp.ok || status.mobile.telegram.ok);
     writeDeliveryStatus(status);
 
+    // Clear delivery status summary
+    const successChannels: string[] = [];
     const failedChannels: string[] = [];
-    if (!status.email.ok) failedChannels.push('email');
-    if (!status.mobile.whatsapp.ok) failedChannels.push('whatsapp');
-    if (!status.mobile.telegram.ok) failedChannels.push('telegram');
+
+    if (status.email.ok) successChannels.push('email');
+    else failedChannels.push('email');
+
+    if (status.mobile.whatsapp.ok) successChannels.push('whatsapp');
+    else failedChannels.push('whatsapp');
+
+    if (status.mobile.telegram.ok) successChannels.push('telegram');
+    else failedChannels.push('telegram');
+
+    console.log('\n📊 Delivery Status Summary:');
+    console.log(`   ✅ Successful: ${successChannels.length > 0 ? successChannels.join(', ') : 'none'}`);
+    console.log(`   ❌ Failed: ${failedChannels.length > 0 ? failedChannels.join(', ') : 'none'}`);
+    console.log(`   📁 Artifacts: ${artifactsDir}`);
 
     if (failedChannels.length > 0 && failedChannels.length < 3) {
-      console.warn(`\n⚠️  Partial delivery — failed: ${failedChannels.join(', ')}`);
+      console.warn(`\n⚠️  Partial delivery — ${successChannels.length}/${successChannels.length + failedChannels.length} channels succeeded.`);
     }
 
     if (status.overallOk) {
       console.log('\n🦖 Daily Digest delivered successfully.');
       process.exit(0);
     } else {
-      console.error('\n❌ All delivery channels failed.');
+      console.error('\n❌ All delivery channels failed. Artifacts preserved for manual resend.');
       process.exit(1);
     }
   } catch (error: any) {
