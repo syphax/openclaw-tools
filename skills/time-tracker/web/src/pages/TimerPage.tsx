@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
-import { getStatus, startPomo, stopPomo, extendPomo, getRecentSessions, getDefaults } from '../api/client.ts'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { getStatus, startPomo, stopPomo, pausePomo, resumePomo, extendPomo, getRecentSessions, getDefaults, getProjects } from '../api/client.ts'
 import type { TimerStatus, Session } from '../api/types.ts'
 
 function formatTime(totalSeconds: number): string {
@@ -16,6 +16,33 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' })
 }
 
+function playPing() {
+  try {
+    const ctx = new AudioContext()
+    // Two-tone ping
+    for (const [freq, start] of [[880, 0], [1100, 0.15]] as const) {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.value = freq
+      gain.gain.setValueAtTime(0.3, ctx.currentTime + start)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + 0.3)
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start(ctx.currentTime + start)
+      osc.stop(ctx.currentTime + start + 0.3)
+    }
+  } catch {
+    // AudioContext not available
+  }
+}
+
+function showNotification(title: string, body: string) {
+  if (Notification.permission === 'granted') {
+    new Notification(title, { body })
+  }
+}
+
 export default function TimerPage() {
   const [status, setStatus] = useState<TimerStatus>({ active: false, session: null, phase: 'idle', remaining_seconds: 0 })
   const [history, setHistory] = useState<Session[]>([])
@@ -24,18 +51,44 @@ export default function TimerPage() {
   // Form state
   const [task, setTask] = useState('')
   const [project, setProject] = useState('')
+  const [projects, setProjects] = useState<string[]>([])
+  const [showNewProject, setShowNewProject] = useState(false)
   const [work, setWork] = useState(25)
-  const [cycle, setCycle] = useState(30)
+  const [rest, setRest] = useState(5)
   const [extendMin, setExtendMin] = useState(5)
 
-  // Load defaults on mount
+  // Track previous phase to detect transitions
+  const prevPhase = useRef(status.phase)
+  useEffect(() => {
+    const prev = prevPhase.current
+    const curr = status.phase
+    prevPhase.current = curr
+
+    if (prev === 'working' && curr === 'resting') {
+      playPing()
+      showNotification('Time\'s up!', 'Take a break.')
+    } else if (prev === 'resting' && curr === 'idle') {
+      playPing()
+      showNotification('Cycle complete!', 'Start working!')
+    }
+  }, [status.phase])
+
+  // Request notification permission on mount
+  useEffect(() => {
+    if (Notification.permission === 'default') {
+      Notification.requestPermission()
+    }
+  }, [])
+
+  // Load defaults and projects on mount
   useEffect(() => {
     getDefaults().then(d => {
       setTask(d.task)
       setProject(d.project)
       setWork(d.work_minutes)
-      setCycle(d.cycle_minutes)
+      setRest(d.cycle_minutes - d.work_minutes)
     }).catch(() => {})
+    getProjects().then(setProjects).catch(() => {})
   }, [])
 
   // Poll status
@@ -58,7 +111,9 @@ export default function TimerPage() {
   const handleStart = async () => {
     setError('')
     try {
-      await startPomo({ task, project, work, cycle })
+      await startPomo({ task, project, work, rest })
+      setShowNewProject(false)
+      getProjects().then(setProjects).catch(() => {})
       refresh()
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to start')
@@ -72,6 +127,26 @@ export default function TimerPage() {
       refresh()
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to stop')
+    }
+  }
+
+  const handlePause = async () => {
+    setError('')
+    try {
+      await pausePomo()
+      refresh()
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to pause')
+    }
+  }
+
+  const handleResume = async () => {
+    setError('')
+    try {
+      await resumePomo()
+      refresh()
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to resume')
     }
   }
 
@@ -91,7 +166,9 @@ export default function TimerPage() {
       <div className="timer-display">
         {status.active && status.session ? (
           <>
-            <div className="timer-phase">{status.phase === 'working' ? 'Working' : 'Resting'}</div>
+            <div className="timer-phase">
+              {status.phase === 'working' ? 'Working' : status.phase === 'paused' ? 'Paused' : 'Resting'}
+            </div>
             <div className={`timer-countdown ${status.phase}`}>
               {formatTime(status.remaining_seconds)}
             </div>
@@ -117,6 +194,11 @@ export default function TimerPage() {
       {status.active ? (
         <div className="action-bar">
           <button className="btn btn-stop" onClick={handleStop}>Stop</button>
+          {status.phase === 'paused' ? (
+            <button className="btn btn-start" onClick={handleResume}>Resume</button>
+          ) : (
+            <button className="btn btn-pause" onClick={handlePause}>Pause</button>
+          )}
           {status.phase === 'working' && (
             <>
               <input
@@ -139,15 +221,47 @@ export default function TimerPage() {
             </div>
             <div className="form-group">
               <label>Project</label>
-              <input value={project} onChange={e => setProject(e.target.value)} />
+              {showNewProject ? (
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input
+                    value={project}
+                    onChange={e => setProject(e.target.value)}
+                    placeholder="New project name"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-extend"
+                    style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem' }}
+                    onClick={() => { setShowNewProject(false); setProject(projects[0] ?? '') }}
+                  >Cancel</button>
+                </div>
+              ) : (
+                <select
+                  value={project}
+                  onChange={e => {
+                    if (e.target.value === '__new__') {
+                      setShowNewProject(true)
+                      setProject('')
+                    } else {
+                      setProject(e.target.value)
+                    }
+                  }}
+                >
+                  {projects.map(p => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                  <option value="__new__">+ New Project</option>
+                </select>
+              )}
             </div>
             <div className="form-group">
               <label>Work (min)</label>
               <input type="number" value={work} min={1} onChange={e => setWork(Number(e.target.value))} />
             </div>
             <div className="form-group">
-              <label>Cycle (min)</label>
-              <input type="number" value={cycle} min={1} onChange={e => setCycle(Number(e.target.value))} />
+              <label>Rest (min)</label>
+              <input type="number" value={rest} min={1} onChange={e => setRest(Number(e.target.value))} />
             </div>
             <div className="full-width" style={{ textAlign: 'center', marginTop: '0.5rem' }}>
               <button className="btn btn-start" onClick={handleStart}>Start</button>

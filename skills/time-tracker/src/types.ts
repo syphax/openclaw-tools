@@ -6,7 +6,7 @@ export interface Session {
   work_end_at: string;      // ISO timestamp
   cycle_end_at: string;     // ISO timestamp
   stopped_at: string | null;
-  status: 'working' | 'resting' | 'completed' | 'stopped';
+  status: 'working' | 'resting' | 'paused' | 'completed' | 'stopped';
   origin: string;           // 'web' | 'telegram' | 'whatsapp' | 'cli'
   work_minutes: number;
   cycle_minutes: number;
@@ -15,7 +15,7 @@ export interface Session {
 export interface TimerStatus {
   active: boolean;
   session: Session | null;
-  phase: 'working' | 'resting' | 'idle';
+  phase: 'working' | 'resting' | 'paused' | 'idle';
   remaining_seconds: number;  // seconds until current phase ends
 }
 
@@ -34,4 +34,5 @@ export interface Config {
 export interface ProjectReport {
   project: string;
   total_work_minutes: number;
+  session_count: number;
 }

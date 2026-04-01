@@ -39,3 +39,20 @@ It also has a reporting view (different page) that lists total work time by proj
 ## Data Storage
 
 The app stores data in a DuckDB database at `~/.openclaw/data/time-tracker/`.
+
+## Enhancements
+
+* Can we add a command line version as well, that I can use from a terminal? - DONE
+* If the web ui is open in a browser, can we get it to ping when time is up?
+* Time-stamps should be rounded to the second; no need to record milliseconds.
+* I want to add a -r flag for rest time. A command can either have (-w and -r) or (-w and -c) or even (-r and -c) flags. If all 3 are given, this should return an error, *unless* the sum of the flags is equal to the cycle time. 
+* If I issue a -s stop command, the app should stop the current task and record the time worked so far, overwriting the end time in the database.
+* Also, the Reports tab in the web UI is currently blank, though I have some (mostly testing) tasks
+* I want an -m flag (manual) flag which takes a date, plus any of the other flags, and records the task as if it had been started on that date (no time, so assume midnight) - example: `pomo -m 2026-03-27 -t "Backlog task" -w 30 -p "Main project"`
+
+* I want the web UI to:
+  * Replace the Project text box with a drop-down list of projects. One option is "New Project" which will prompt for a new project name. The entrants in the Project drop-down is the unique list of projects in the database.
+
+Backlog:
+
+* Delete projects / tasks

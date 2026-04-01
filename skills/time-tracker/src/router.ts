@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { startTimer, stopTimer, extendTimer, getStatus } from './timer.js';
-import { getRecentSessions, getWorkTimeByProject } from './db.js';
+import { startTimer, stopTimer, pauseTimer, resumeTimer, extendTimer, getStatus } from './timer.js';
+import { getRecentSessions, getWorkTimeByProject, getDistinctProjects } from './db.js';
 import type { Config } from './types.js';
 import fs from 'fs';
 import path from 'path';
@@ -17,12 +17,54 @@ export function createRouter(): Router {
       const {
         task = config.defaults.task,
         project = config.defaults.project,
-        work = config.defaults.work_minutes,
-        cycle = config.defaults.cycle_minutes,
         origin = 'web',
       } = req.body || {};
 
-      const session = await startTimer(task, project, work, cycle, origin);
+      const hasWork  = req.body?.work  != null;
+      const hasRest  = req.body?.rest  != null;
+      const hasCycle = req.body?.cycle != null;
+
+      let work:  number;
+      let cycle: number;
+
+      if (hasWork && hasRest && hasCycle) {
+        // All three given — only valid if work + rest == cycle
+        work = req.body.work;
+        const rest = req.body.rest;
+        cycle = req.body.cycle;
+        if (work + rest !== cycle) {
+          res.status(400).json({ ok: false, error: `Conflicting flags: work (${work}) + rest (${rest}) != cycle (${cycle})` });
+          return;
+        }
+      } else if (hasWork && hasRest) {
+        work = req.body.work;
+        cycle = work + req.body.rest;
+      } else if (hasRest && hasCycle) {
+        cycle = req.body.cycle;
+        work = cycle - req.body.rest;
+        if (work <= 0) {
+          res.status(400).json({ ok: false, error: `Rest (${req.body.rest}) must be less than cycle (${cycle})` });
+          return;
+        }
+      } else if (hasWork && hasCycle) {
+        work = req.body.work;
+        cycle = req.body.cycle;
+      } else if (hasWork) {
+        work = req.body.work;
+        cycle = work + (config.defaults.cycle_minutes - config.defaults.work_minutes);
+      } else if (hasRest) {
+        work = config.defaults.work_minutes;
+        cycle = work + req.body.rest;
+      } else if (hasCycle) {
+        work = config.defaults.work_minutes;
+        cycle = req.body.cycle;
+      } else {
+        work = config.defaults.work_minutes;
+        cycle = config.defaults.cycle_minutes;
+      }
+
+      const back = req.body?.back ?? 0;
+      const session = await startTimer(task, project, work, cycle, origin, back);
       res.json({ ok: true, session });
     } catch (err: any) {
       res.status(409).json({ ok: false, error: err.message });
@@ -33,6 +75,26 @@ export function createRouter(): Router {
   router.post('/pomo/stop', async (_req, res) => {
     try {
       const session = await stopTimer();
+      res.json({ ok: true, session });
+    } catch (err: any) {
+      res.status(409).json({ ok: false, error: err.message });
+    }
+  });
+
+  // Pause the active timer
+  router.post('/pomo/pause', async (_req, res) => {
+    try {
+      const session = await pauseTimer();
+      res.json({ ok: true, session });
+    } catch (err: any) {
+      res.status(409).json({ ok: false, error: err.message });
+    }
+  });
+
+  // Resume the paused timer
+  router.post('/pomo/resume', async (_req, res) => {
+    try {
+      const session = await resumeTimer();
       res.json({ ok: true, session });
     } catch (err: any) {
       res.status(409).json({ ok: false, error: err.message });
@@ -73,6 +135,12 @@ export function createRouter(): Router {
     res.json(report);
   });
 
+  // Get distinct projects for dropdown
+  router.get('/projects', async (_req, res) => {
+    const projects = await getDistinctProjects();
+    res.json(projects);
+  });
+
   // Get config defaults (for frontend form pre-fill)
   router.get('/config/defaults', (_req, res) => {
     res.json(config.defaults);
@@ -86,8 +154,10 @@ export function createRouter(): Router {
         { flag: '-t <task>',    description: `Task name (default: "${config.defaults.task}")` },
         { flag: '-p <project>', description: `Project name (default: "${config.defaults.project}")` },
         { flag: '-w <minutes>', description: `Work time in minutes (default: ${config.defaults.work_minutes})` },
+        { flag: '-r <minutes>', description: 'Rest time in minutes (alternative to -c)' },
         { flag: '-c <minutes>', description: `Cycle time in minutes (default: ${config.defaults.cycle_minutes})` },
-        { flag: '-s',           description: 'Stop the active timer' },
+        { flag: '-b <minutes>', description: 'Back-date start time by N minutes (timer counts remaining)' },
+        { flag: '-s',           description: 'Stop the active timer (records actual work time)' },
         { flag: '-e <minutes>', description: 'Extend work time by N minutes (rest period stays the same)' },
         { flag: '-h',           description: 'Show this help' },
       ],
@@ -95,6 +165,9 @@ export function createRouter(): Router {
         'pomo                              — start with defaults (25m work / 5m rest)',
         'pomo -t "write tests" -p openclaw — start a named task under a project',
         'pomo -w 45 -c 55                  — custom 45m work / 10m rest',
+        'pomo -w 25 -r 5                   — 25m work / 5m rest (cycle = 30m)',
+        'pomo -r 10 -c 40                  — 30m work / 10m rest (work = cycle - rest)',
+        'pomo -b 5 -w 20                   — started 5m ago, 15m remaining',
         'pomo -e 10                        — extend current work phase by 10 minutes',
         'pomo -s                           — stop the active timer',
       ],

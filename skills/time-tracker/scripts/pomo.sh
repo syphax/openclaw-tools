@@ -40,7 +40,9 @@ ACTION="start"
 TASK=""
 PROJECT=""
 WORK=""
+REST=""
 CYCLE=""
+BACK=""
 EXTEND=""
 ORIGIN="${POMO_ORIGIN:-cli}"
 
@@ -49,7 +51,9 @@ while [[ $# -gt 0 ]]; do
     -t) TASK="$2"; shift 2 ;;
     -p) PROJECT="$2"; shift 2 ;;
     -w) WORK="$2"; shift 2 ;;
+    -r) REST="$2"; shift 2 ;;
     -c) CYCLE="$2"; shift 2 ;;
+    -b) BACK="$2"; shift 2 ;;
     -s) ACTION="stop"; shift ;;
     -e) ACTION="extend"; EXTEND="$2"; shift 2 ;;
     -h) ACTION="help"; shift ;;
@@ -75,7 +79,9 @@ case "$ACTION" in
     [[ -n "$TASK" ]]    && BODY="${BODY},\"task\":\"${TASK}\""
     [[ -n "$PROJECT" ]] && BODY="${BODY},\"project\":\"${PROJECT}\""
     [[ -n "$WORK" ]]    && BODY="${BODY},\"work\":${WORK}"
+    [[ -n "$REST" ]]    && BODY="${BODY},\"rest\":${REST}"
     [[ -n "$CYCLE" ]]   && BODY="${BODY},\"cycle\":${CYCLE}"
+    [[ -n "$BACK" ]]    && BODY="${BODY},\"back\":${BACK}"
     BODY="${BODY}}"
 
     curl -s -X POST "${BASE}/pomo/start" \

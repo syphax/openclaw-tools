@@ -61,7 +61,7 @@ export async function updateSession(id: number, updates: Partial<Session>): Prom
 export async function getActiveSession(): Promise<Session | null> {
   const rows = await db.all(`
     SELECT * FROM sessions
-    WHERE status IN ('working', 'resting')
+    WHERE status IN ('working', 'resting', 'paused')
     ORDER BY started_at DESC
     LIMIT 1
   `);
@@ -80,7 +80,8 @@ export async function getRecentSessions(limit: number = 10): Promise<Session[]> 
 export async function getWorkTimeByProject(startDate?: string, endDate?: string): Promise<ProjectReport[]> {
   let query = `
     SELECT project,
-           SUM(work_minutes) as total_work_minutes
+           SUM(work_minutes) as total_work_minutes,
+           COUNT(*) as session_count
     FROM sessions
     WHERE status IN ('completed', 'stopped', 'resting')
   `;
@@ -91,8 +92,11 @@ export async function getWorkTimeByProject(startDate?: string, endDate?: string)
     params.push(startDate);
   }
   if (endDate) {
-    query += ` AND started_at <= ?`;
-    params.push(endDate);
+    query += ` AND started_at < ?`;
+    // Add one day so "2026-03-28" includes all of that day
+    const nextDay = new Date(endDate);
+    nextDay.setDate(nextDay.getDate() + 1);
+    params.push(nextDay.toISOString().split('T')[0]);
   }
 
   query += ` GROUP BY project ORDER BY total_work_minutes DESC`;
@@ -100,8 +104,16 @@ export async function getWorkTimeByProject(startDate?: string, endDate?: string)
   const rows = await db.all(query, ...params);
   return rows.map(r => ({
     project: (r as any).project,
-    total_work_minutes: (r as any).total_work_minutes,
+    total_work_minutes: Number((r as any).total_work_minutes),
+    session_count: Number((r as any).session_count),
   }));
+}
+
+export async function getDistinctProjects(): Promise<string[]> {
+  const rows = await db.all(`
+    SELECT DISTINCT project FROM sessions ORDER BY project
+  `);
+  return rows.map(r => (r as any).project);
 }
 
 function mapRow(row: any): Session {

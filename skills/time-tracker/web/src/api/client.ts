@@ -17,6 +17,7 @@ export async function startPomo(opts: {
   task?: string
   project?: string
   work?: number
+  rest?: number
   cycle?: number
 }): Promise<{ ok: boolean; session: Session }> {
   return json('/pomo/start', {
@@ -28,6 +29,14 @@ export async function startPomo(opts: {
 
 export async function stopPomo(): Promise<{ ok: boolean; session: Session }> {
   return json('/pomo/stop', { method: 'POST' })
+}
+
+export async function pausePomo(): Promise<{ ok: boolean; session: Session }> {
+  return json('/pomo/pause', { method: 'POST' })
+}
+
+export async function resumePomo(): Promise<{ ok: boolean; session: Session }> {
+  return json('/pomo/resume', { method: 'POST' })
 }
 
 export async function extendPomo(minutes: number): Promise<{ ok: boolean; session: Session }> {
@@ -48,6 +57,10 @@ export async function getReportByProject(start?: string, end?: string): Promise<
   if (end) params.set('end', end)
   const qs = params.toString()
   return json(`/reports/by-project${qs ? `?${qs}` : ''}`)
+}
+
+export async function getProjects(): Promise<string[]> {
+  return json('/projects')
 }
 
 export async function getDefaults(): Promise<{

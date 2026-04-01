@@ -1,0 +1,5 @@
+#!/bin/bash
+# Pomo CLI — Pomodoro time tracker
+# Usage: pomo -t "task" -p "project" -w 25 -c 30
+#        pomo -s | pomo -e 10 | pomo -h
+exec bash "$(dirname "$(readlink -f "$0")")/../scripts/pomo.sh" "$@"

@@ -56,7 +56,7 @@ export default function ReportPage() {
                 <tr key={r.project}>
                   <td>{r.project}</td>
                   <td style={{ textAlign: 'right' }}>{formatMinutes(r.total_work_minutes)}</td>
-                  <td style={{ textAlign: 'right' }}>—</td>
+                  <td style={{ textAlign: 'right' }}>{r.session_count}</td>
                 </tr>
               ))}
               <tr style={{ fontWeight: 700, borderTop: '2px solid #444' }}>

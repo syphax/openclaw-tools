@@ -5,6 +5,13 @@ import type { Session, TimerStatus } from './types.js';
 let currentSession: Session | null = null;
 let workTimer: ReturnType<typeof setTimeout> | null = null;
 let cycleTimer: ReturnType<typeof setTimeout> | null = null;
+let pausedAt: number | null = null;         // timestamp when paused
+let statusBeforePause: string | null = null; // 'working' or 'resting'
+
+/** Round an ISO timestamp to the second (strip milliseconds). */
+function toSecond(date: Date): string {
+  return date.toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
 
 export async function startTimer(
   task: string,
@@ -12,21 +19,26 @@ export async function startTimer(
   workMinutes: number,
   cycleMinutes: number,
   origin: string,
+  backMinutes: number = 0,
 ): Promise<Session> {
   if (currentSession) {
     throw new Error('A timer is already active. Stop it first with pomo -s.');
   }
 
-  const now = new Date();
-  const workEnd = new Date(now.getTime() + workMinutes * 60_000);
-  const cycleEnd = new Date(now.getTime() + cycleMinutes * 60_000);
+  if (backMinutes >= workMinutes) {
+    throw new Error(`Back time (${backMinutes}m) must be less than work time (${workMinutes}m).`);
+  }
+
+  const start = new Date(Date.now() - backMinutes * 60_000);
+  const workEnd = new Date(start.getTime() + workMinutes * 60_000);
+  const cycleEnd = new Date(start.getTime() + cycleMinutes * 60_000);
 
   const sessionData = {
     task,
     project,
-    started_at: now.toISOString(),
-    work_end_at: workEnd.toISOString(),
-    cycle_end_at: cycleEnd.toISOString(),
+    started_at: toSecond(start),
+    work_end_at: toSecond(workEnd),
+    cycle_end_at: toSecond(cycleEnd),
     status: 'working' as const,
     origin,
     work_minutes: workMinutes,
@@ -35,6 +47,8 @@ export async function startTimer(
 
   const id = await insertSession(sessionData);
   currentSession = { id, stopped_at: null, ...sessionData };
+  pausedAt = null;
+  statusBeforePause = null;
 
   armTimers();
   console.log(`⏱️  Timer started: "${task}" [${project}] — ${workMinutes}m work / ${cycleMinutes - workMinutes}m rest`);
@@ -47,15 +61,95 @@ export async function stopTimer(): Promise<Session> {
   }
 
   clearTimers();
-  const now = new Date().toISOString();
-  currentSession.stopped_at = now;
-  currentSession.status = 'stopped';
-  await updateSession(currentSession.id, { stopped_at: now, status: 'stopped' });
+  const nowDate = new Date();
+  const now = toSecond(nowDate);
+
+  // If paused, treat the effective status as what it was before pausing
+  const effectiveStatus = currentSession.status === 'paused' ? statusBeforePause : currentSession.status;
+
+  if (effectiveStatus === 'resting') {
+    // Stopping during rest = completed (just skipping/shortening the break)
+    currentSession.stopped_at = now;
+    currentSession.status = 'completed';
+
+    await updateSession(currentSession.id, {
+      stopped_at: now,
+      status: 'completed',
+    });
+  } else {
+    // Stopping during work = record actual work time
+    const startedAt = new Date(currentSession.started_at).getTime();
+    const actualWorkMs = nowDate.getTime() - startedAt;
+    const actualWorkMinutes = Math.round(actualWorkMs / 60_000);
+
+    currentSession.stopped_at = now;
+    currentSession.work_end_at = now;
+    currentSession.work_minutes = actualWorkMinutes;
+    currentSession.status = 'stopped';
+
+    await updateSession(currentSession.id, {
+      stopped_at: now,
+      work_end_at: now,
+      work_minutes: actualWorkMinutes,
+      status: 'stopped',
+    });
+  }
 
   const stopped = currentSession;
   currentSession = null;
+  pausedAt = null;
+  statusBeforePause = null;
   console.log(`⏹️  Timer stopped: "${stopped.task}"`);
   return stopped;
+}
+
+export async function pauseTimer(): Promise<Session> {
+  if (!currentSession) {
+    throw new Error('No active timer to pause.');
+  }
+  if (currentSession.status === 'paused') {
+    throw new Error('Timer is already paused.');
+  }
+
+  clearTimers();
+  pausedAt = Date.now();
+  statusBeforePause = currentSession.status;
+  currentSession.status = 'paused';
+  await updateSession(currentSession.id, { status: 'paused' });
+
+  console.log(`⏸️  Timer paused: "${currentSession.task}"`);
+  return currentSession;
+}
+
+export async function resumeTimer(): Promise<Session> {
+  if (!currentSession) {
+    throw new Error('No active timer to resume.');
+  }
+  if (currentSession.status !== 'paused' || pausedAt === null || statusBeforePause === null) {
+    throw new Error('Timer is not paused.');
+  }
+
+  // Shift end times forward by the pause duration
+  const pauseDuration = Date.now() - pausedAt;
+  const newWorkEnd = new Date(new Date(currentSession.work_end_at).getTime() + pauseDuration);
+  const newCycleEnd = new Date(new Date(currentSession.cycle_end_at).getTime() + pauseDuration);
+
+  currentSession.work_end_at = toSecond(newWorkEnd);
+  currentSession.cycle_end_at = toSecond(newCycleEnd);
+  currentSession.status = statusBeforePause as Session['status'];
+
+  await updateSession(currentSession.id, {
+    work_end_at: currentSession.work_end_at,
+    cycle_end_at: currentSession.cycle_end_at,
+    status: currentSession.status,
+  });
+
+  pausedAt = null;
+  statusBeforePause = null;
+  armTimers();
+
+  console.log(`▶️  Timer resumed: "${currentSession.task}" — work ends ${currentSession.work_end_at}`);
+  return currentSession;
 }
 
 export async function extendTimer(minutes: number): Promise<Session> {
@@ -70,8 +164,8 @@ export async function extendTimer(minutes: number): Promise<Session> {
   const newWorkEnd = new Date(new Date(currentSession.work_end_at).getTime() + extendMs);
   const newCycleEnd = new Date(new Date(currentSession.cycle_end_at).getTime() + extendMs);
 
-  currentSession.work_end_at = newWorkEnd.toISOString();
-  currentSession.cycle_end_at = newCycleEnd.toISOString();
+  currentSession.work_end_at = toSecond(newWorkEnd);
+  currentSession.cycle_end_at = toSecond(newCycleEnd);
   currentSession.work_minutes += minutes;
   currentSession.cycle_minutes += minutes;
 
@@ -91,6 +185,28 @@ export async function extendTimer(minutes: number): Promise<Session> {
 export function getStatus(): TimerStatus {
   if (!currentSession) {
     return { active: false, session: null, phase: 'idle', remaining_seconds: 0 };
+  }
+
+  if (currentSession.status === 'paused') {
+    // Show remaining time frozen at the moment of pause
+    const workEnd = new Date(currentSession.work_end_at).getTime();
+    const cycleEnd = new Date(currentSession.cycle_end_at).getTime();
+    const frozenAt = pausedAt ?? Date.now();
+
+    if (statusBeforePause === 'working') {
+      return {
+        active: true,
+        session: currentSession,
+        phase: 'paused',
+        remaining_seconds: Math.max(0, Math.round((workEnd - frozenAt) / 1000)),
+      };
+    }
+    return {
+      active: true,
+      session: currentSession,
+      phase: 'paused',
+      remaining_seconds: Math.max(0, Math.round((cycleEnd - frozenAt) / 1000)),
+    };
   }
 
   const now = Date.now();
@@ -123,15 +239,23 @@ export async function restoreTimers(): Promise<void> {
   const workEnd = new Date(session.work_end_at).getTime();
   const cycleEnd = new Date(session.cycle_end_at).getTime();
 
+  if (session.status === 'paused') {
+    // Stay paused — user needs to resume manually
+    currentSession = session;
+    // We don't know exactly when it was paused, so freeze at now
+    pausedAt = now;
+    statusBeforePause = workEnd > now ? 'working' : 'resting';
+    console.log(`🔄 Restored paused session: "${session.task}"`);
+    return;
+  }
+
   if (cycleEnd <= now) {
-    // Cycle already passed while server was down — mark completed silently
     await updateSession(session.id, { status: 'completed' });
     console.log(`⏹️  Recovered expired session "${session.task}" — marked completed`);
     return;
   }
 
   if (workEnd <= now) {
-    // Work ended but rest hasn't — resume in resting phase
     session.status = 'resting';
     await updateSession(session.id, { status: 'resting' });
   }

@@ -18,11 +18,15 @@ Activate when the user sends a message matching:
 | `pomo -t "task name"` | Start with a named task |
 | `pomo -p "project"` | Start under a specific project |
 | `pomo -w 45 -c 55` | Custom work/cycle times (minutes) |
-| `pomo -s` | Stop the active timer |
+| `pomo -w 25 -r 5` | Work + rest times (cycle = 30m) |
+| `pomo -r 10 -c 40` | Rest + cycle (work = 30m) |
+| `pomo -s` | Stop the active timer (records actual work time) |
 | `pomo -e 10` | Extend work time by 10 minutes |
 | `pomo -h` | Show help with all options and examples |
 
 All flags are optional. Defaults are configured in `cfg/time-tracker-config.json`.
+
+**Time flags:** Use any two of `-w` (work), `-r` (rest), `-c` (cycle). The third is derived (cycle = work + rest). If all three are given, they must be consistent (work + rest = cycle) or the command returns an error.
 
 ## How It Works
 

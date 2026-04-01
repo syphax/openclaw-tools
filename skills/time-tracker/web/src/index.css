@@ -63,6 +63,10 @@ body {
   color: #51cf66;
 }
 
+.timer-countdown.paused {
+  color: #ffa94d;
+}
+
 .timer-countdown.idle {
   color: #555;
 }
@@ -128,9 +132,20 @@ body {
   font-size: 0.95rem;
 }
 
-.form-group input:focus {
+.form-group input:focus,
+.form-group select:focus {
   outline: none;
   border-color: #8888cc;
+}
+
+.form-group select {
+  padding: 0.5rem 0.75rem;
+  background: #16213e;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #e0e0e0;
+  font-size: 0.95rem;
+  cursor: pointer;
 }
 
 .btn {
@@ -159,6 +174,16 @@ body {
 
 .btn-stop:hover {
   background: #666;
+}
+
+.btn-pause {
+  background: #3a2a1a;
+  color: #ffa94d;
+  border: 1px solid #555;
+}
+
+.btn-pause:hover {
+  background: #4a3a2a;
 }
 
 .btn-extend {
@@ -237,6 +262,7 @@ td {
 .status-badge.stopped { background: #3a2a1a; color: #ffa94d; }
 .status-badge.working { background: #3a1a1a; color: #ff6b6b; }
 .status-badge.resting { background: #1a3a3a; color: #66d9ef; }
+.status-badge.paused { background: #3a3a1a; color: #ffd43b; }
 
 /* Report page */
 .report-filters {
