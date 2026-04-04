@@ -1,0 +1,9 @@
+venv/
+logs/*.log
+logs/*.json
+logs/arc/
+data/*.csv
+debug/
+cfg/cookies.txt
+cfg/event-page.html
+__pycache__/

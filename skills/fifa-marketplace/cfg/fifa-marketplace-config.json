@@ -1,0 +1,8 @@
+{
+  "event_list_url": "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026/tickets",
+  "resale_base_url": "https://fwc26-resale-usd.tickets.fifa.com",
+  "seatmap_api_base": "https://fwc26-resale-usd.tickets.fifa.com/tnwr/v1/secure/seatmap/seats/free/ol",
+  "product_id": "10229225515651",
+  "bbox_tile_size": 5000,
+  "bbox_max_coord": 30000
+}
