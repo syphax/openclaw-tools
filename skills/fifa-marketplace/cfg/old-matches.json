@@ -3,728 +3,624 @@
     "performance_id": "10229225516056",
     "match_code": "M1",
     "description": "M1",
-    "availability": "limited",
-    "location": "Mexico City Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700886",
     "match_code": "M2",
     "description": "M2",
-    "availability": "limited",
-    "location": "Guadalajara Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700887",
     "match_code": "M3",
     "description": "M3",
-    "availability": "limited",
-    "location": "Toronto Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700888",
     "match_code": "M4",
     "description": "M4",
-    "availability": "limited",
-    "location": "Los Angeles Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700889",
     "match_code": "M5",
     "description": "M5",
-    "availability": "limited",
-    "location": "Boston Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700890",
     "match_code": "M6",
     "description": "M6",
-    "availability": "limited",
-    "location": "BC Place Vancouver"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700891",
     "match_code": "M7",
     "description": "M7",
-    "availability": "limited",
-    "location": "New York/New Jersey Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700892",
     "match_code": "M8",
     "description": "M8",
-    "availability": "limited",
-    "location": "San Francisco Bay Area Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700893",
     "match_code": "M9",
     "description": "M9",
-    "availability": "limited",
-    "location": "Philadelphia Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700895",
     "match_code": "M10",
     "description": "M10",
-    "availability": "limited",
-    "location": "Houston Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700896",
     "match_code": "M11",
     "description": "M11",
-    "availability": "limited",
-    "location": "Dallas Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700906",
     "match_code": "M12",
     "description": "M12",
-    "availability": "limited",
-    "location": "Monterrey Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700899",
     "match_code": "M13",
     "description": "M13",
-    "availability": "limited",
-    "location": "Miami Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700902",
     "match_code": "M14",
     "description": "M14",
-    "availability": "limited",
-    "location": "Atlanta Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700901",
     "match_code": "M15",
     "description": "M15",
-    "availability": "limited",
-    "location": "Los Angeles Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700903",
     "match_code": "M16",
     "description": "M16",
-    "availability": "limited",
-    "location": "Seattle Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700904",
     "match_code": "M17",
     "description": "M17",
-    "availability": "limited",
-    "location": "New York/New Jersey Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700905",
     "match_code": "M18",
     "description": "M18",
-    "availability": "limited",
-    "location": "Boston Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700907",
     "match_code": "M19",
     "description": "M19",
-    "availability": "limited",
-    "location": "Kansas City Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700908",
     "match_code": "M20",
     "description": "M20",
-    "availability": "limited",
-    "location": "San Francisco Bay Area Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700909",
     "match_code": "M21",
     "description": "M21",
-    "availability": "limited",
-    "location": "Toronto Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700910",
     "match_code": "M22",
     "description": "M22",
-    "availability": "limited",
-    "location": "Dallas Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700911",
     "match_code": "M23",
     "description": "M23",
-    "availability": "limited",
-    "location": "Houston Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700912",
     "match_code": "M24",
     "description": "M24",
-    "availability": "limited",
-    "location": "Mexico City Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700913",
     "match_code": "M25",
     "description": "M25",
-    "availability": "limited",
-    "location": "Atlanta Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700914",
     "match_code": "M26",
     "description": "M26",
-    "availability": "limited",
-    "location": "Los Angeles Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700915",
     "match_code": "M27",
     "description": "M27",
-    "availability": "limited",
-    "location": "BC Place Vancouver"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700916",
     "match_code": "M28",
     "description": "M28",
-    "availability": "limited",
-    "location": "Guadalajara Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700917",
     "match_code": "M29",
     "description": "M29",
-    "availability": "limited",
-    "location": "Philadelphia Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700918",
     "match_code": "M30",
     "description": "M30",
-    "availability": "limited",
-    "location": "Boston Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700919",
     "match_code": "M31",
     "description": "M31",
-    "availability": "limited",
-    "location": "San Francisco Bay Area Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700920",
     "match_code": "M32",
     "description": "M32",
-    "availability": "limited",
-    "location": "Seattle Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700921",
     "match_code": "M33",
     "description": "M33",
-    "availability": "limited",
-    "location": "Toronto Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700922",
     "match_code": "M34",
     "description": "M34",
-    "availability": "limited",
-    "location": "Kansas City Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700923",
     "match_code": "M35",
     "description": "M35",
-    "availability": "limited",
-    "location": "Houston Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700924",
     "match_code": "M36",
     "description": "M36",
-    "availability": "limited",
-    "location": "Monterrey Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700925",
     "match_code": "M37",
     "description": "M37",
-    "availability": "limited",
-    "location": "Miami Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700926",
     "match_code": "M38",
     "description": "M38",
-    "availability": "limited",
-    "location": "Atlanta Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700927",
     "match_code": "M39",
     "description": "M39",
-    "availability": "limited",
-    "location": "Los Angeles Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700928",
     "match_code": "M40",
     "description": "M40",
-    "availability": "limited",
-    "location": "BC Place Vancouver"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700929",
     "match_code": "M41",
     "description": "M41",
-    "availability": "limited",
-    "location": "New York/New Jersey Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700930",
     "match_code": "M42",
     "description": "M42",
-    "availability": "limited",
-    "location": "Philadelphia Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700931",
     "match_code": "M43",
     "description": "M43",
-    "availability": "limited",
-    "location": "Dallas Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700932",
     "match_code": "M44",
     "description": "M44",
-    "availability": "limited",
-    "location": "San Francisco Bay Area Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700933",
     "match_code": "M45",
     "description": "M45",
-    "availability": "limited",
-    "location": "Boston Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700934",
     "match_code": "M46",
     "description": "M46",
-    "availability": "limited",
-    "location": "Toronto Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700935",
     "match_code": "M47",
     "description": "M47",
-    "availability": "limited",
-    "location": "Houston Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700936",
     "match_code": "M48",
     "description": "M48",
-    "availability": "limited",
-    "location": "Guadalajara Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700937",
     "match_code": "M49",
     "description": "M49",
-    "availability": "limited",
-    "location": "Miami Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700938",
     "match_code": "M50",
     "description": "M50",
-    "availability": "limited",
-    "location": "Atlanta Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700941",
     "match_code": "M51",
     "description": "M51",
-    "availability": "limited",
-    "location": "BC Place Vancouver"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700942",
     "match_code": "M52",
     "description": "M52",
-    "availability": "limited",
-    "location": "Seattle Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700940",
     "match_code": "M53",
     "description": "M53",
-    "availability": "limited",
-    "location": "Mexico City Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700939",
     "match_code": "M54",
     "description": "M54",
-    "availability": "limited",
-    "location": "Monterrey Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700943",
     "match_code": "M55",
     "description": "M55",
-    "availability": "limited",
-    "location": "Philadelphia Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700944",
     "match_code": "M56",
     "description": "M56",
-    "availability": "limited",
-    "location": "New York/New Jersey Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700945",
     "match_code": "M57",
     "description": "M57",
-    "availability": "limited",
-    "location": "Dallas Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700946",
     "match_code": "M58",
     "description": "M58",
-    "availability": "limited",
-    "location": "Kansas City Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700947",
     "match_code": "M59",
     "description": "M59",
-    "availability": "limited",
-    "location": "Los Angeles Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700948",
     "match_code": "M60",
     "description": "M60",
-    "availability": "limited",
-    "location": "San Francisco Bay Area Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700949",
     "match_code": "M61",
     "description": "M61",
-    "availability": "limited",
-    "location": "Boston Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700950",
     "match_code": "M62",
     "description": "M62",
-    "availability": "limited",
-    "location": "Toronto Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700951",
     "match_code": "M63",
     "description": "M63",
-    "availability": "limited",
-    "location": "Seattle Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700952",
     "match_code": "M64",
     "description": "M64",
-    "availability": "limited",
-    "location": "BC Place Vancouver"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700953",
     "match_code": "M65",
     "description": "M65",
-    "availability": "limited",
-    "location": "Houston Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700954",
     "match_code": "M66",
     "description": "M66",
-    "availability": "limited",
-    "location": "Guadalajara Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700955",
     "match_code": "M67",
     "description": "M67",
-    "availability": "limited",
-    "location": "New York/New Jersey Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700956",
     "match_code": "M68",
     "description": "M68",
-    "availability": "limited",
-    "location": "Philadelphia Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700959",
     "match_code": "M69",
     "description": "M69",
-    "availability": "limited",
-    "location": "Kansas City Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700960",
     "match_code": "M70",
     "description": "M70",
-    "availability": "limited",
-    "location": "Dallas Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700957",
     "match_code": "M71",
     "description": "M71",
-    "availability": "limited",
-    "location": "Miami Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226700958",
     "match_code": "M72",
     "description": "M72",
-    "availability": "limited",
-    "location": "Atlanta Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725328",
     "match_code": "M73",
     "description": "M73",
-    "availability": "limited",
-    "location": "Los Angeles Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725329",
     "match_code": "M74",
     "description": "M74",
-    "availability": "limited",
-    "location": "Boston Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725330",
     "match_code": "M75",
     "description": "M75",
-    "availability": "limited",
-    "location": "Monterrey Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725331",
     "match_code": "M76",
     "description": "M76",
-    "availability": "limited",
-    "location": "Houston Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725332",
     "match_code": "M77",
     "description": "M77",
-    "availability": "limited",
-    "location": "New York/New Jersey Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725333",
     "match_code": "M78",
     "description": "M78",
-    "availability": "limited",
-    "location": "Dallas Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725334",
     "match_code": "M79",
     "description": "M79",
-    "availability": "limited",
-    "location": "Mexico City Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725335",
     "match_code": "M80",
     "description": "M80",
-    "availability": "limited",
-    "location": "Atlanta Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725336",
     "match_code": "M81",
     "description": "M81",
-    "availability": "limited",
-    "location": "San Francisco Bay Area Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725337",
     "match_code": "M82",
     "description": "M82",
-    "availability": "limited",
-    "location": "Seattle Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725338",
     "match_code": "M83",
     "description": "M83",
-    "availability": "limited",
-    "location": "Toronto Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725339",
     "match_code": "M84",
     "description": "M84",
-    "availability": "limited",
-    "location": "Los Angeles Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725340",
     "match_code": "M85",
     "description": "M85",
-    "availability": "limited",
-    "location": "BC Place Vancouver"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725341",
     "match_code": "M86",
     "description": "M86",
-    "availability": "limited",
-    "location": "Miami Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725342",
     "match_code": "M87",
     "description": "M87",
-    "availability": "limited",
-    "location": "Kansas City Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725343",
     "match_code": "M88",
     "description": "M88",
-    "availability": "limited",
-    "location": "Dallas Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725345",
     "match_code": "M89",
     "description": "M89",
-    "availability": "limited",
-    "location": "Philadelphia Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725346",
     "match_code": "M90",
     "description": "M90",
-    "availability": "limited",
-    "location": "Houston Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725347",
     "match_code": "M91",
     "description": "M91",
-    "availability": "limited",
-    "location": "New York/New Jersey Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725348",
     "match_code": "M92",
     "description": "M92",
-    "availability": "limited",
-    "location": "Mexico City Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725349",
     "match_code": "M93",
     "description": "M93",
-    "availability": "limited",
-    "location": "Dallas Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725350",
     "match_code": "M94",
     "description": "M94",
-    "availability": "limited",
-    "location": "Seattle Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725351",
     "match_code": "M95",
     "description": "M95",
-    "availability": "limited",
-    "location": "Atlanta Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725352",
     "match_code": "M96",
     "description": "M96",
-    "availability": "limited",
-    "location": "BC Place Vancouver"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725353",
     "match_code": "M97",
     "description": "M97",
-    "availability": "limited",
-    "location": "Boston Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725354",
     "match_code": "M98",
     "description": "M98",
-    "availability": "limited",
-    "location": "Los Angeles Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725355",
     "match_code": "M99",
     "description": "M99",
-    "availability": "limited",
-    "location": "Miami Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725356",
     "match_code": "M100",
     "description": "M100",
-    "availability": "limited",
-    "location": "Kansas City Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725357",
     "match_code": "M101",
     "description": "M101",
-    "availability": "limited",
-    "location": "Dallas Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725358",
     "match_code": "M102",
     "description": "M102",
-    "availability": "limited",
-    "location": "Atlanta Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725361",
     "match_code": "M103",
     "description": "M103",
-    "availability": "limited",
-    "location": "Miami Stadium"
+    "availability": "limited"
   },
   {
     "performance_id": "10229226725360",
     "match_code": "M104",
     "description": "M104",
-    "availability": "limited",
-    "location": "New York/New Jersey Stadium"
+    "availability": "limited"
   }
 ]

@@ -182,7 +182,26 @@ def parse_matches_from_html(html):
         if aria_match:
             code_match = re.search(r'event_code_(\w+)', aria_match.group(1))
             if code_match:
-                match_code = code_match.group(1)
+                raw_code = code_match.group(1)
+                # Zero-pad to M001 format (M1 → M001, M12 → M012, M104 → M104)
+                num_match = re.match(r'^(M)(\d+)$', raw_code)
+                if num_match:
+                    match_code = f"M{int(num_match.group(2)):03d}"
+                else:
+                    match_code = raw_code
+
+        # Location: extract venue_XX id from aria-labelledby, then find matching element
+        location = ""
+        venue_id_match = re.search(r'venue_(\w+)', aria_match.group(1) if aria_match else "")
+        if venue_id_match:
+            venue_el_id = f"venue_{venue_id_match.group(1)}"
+            venue_pattern = re.compile(
+                rf'id="{re.escape(venue_el_id)}"[^>]*>.*?<span\s+class="site"\s+title="([^"]*)"',
+                re.DOTALL,
+            )
+            venue_hit = venue_pattern.search(html)
+            if venue_hit:
+                location = venue_hit.group(1)
 
         # Availability from class
         availability = "available"
@@ -196,6 +215,7 @@ def parse_matches_from_html(html):
             "match_code": match_code,
             "description": match_code,
             "availability": availability,
+            "location": location,
         })
 
     logger.info(f"Parsed {len(matches)} matches from HTML")
@@ -259,6 +279,9 @@ def fetch_seats_for_bbox(session, config, performance_id, x, y, w, h):
         if resp.status_code != 200:
             body = resp.text[:500]
             logger.warning(f"  bbox ({x},{y},{w},{h}): HTTP {resp.status_code} — {body}")
+            if resp.status_code == 403 and "captcha-delivery.com" in body:
+                logger.error("CAPTCHA detected — stopping immediately")
+                return "CAPTCHA"
             return []
         data = resp.json()
         features = data.get("features", [])
@@ -270,7 +293,10 @@ def fetch_seats_for_bbox(session, config, performance_id, x, y, w, h):
 
 
 def scrape_match(session, config, performance_id, match_label):
-    """Scrape all seats for a match by tiling bbox across the venue."""
+    """Scrape all seats for a match by tiling bbox across the venue.
+
+    Returns list of seat features, or "CAPTCHA" if captcha was triggered.
+    """
     tile_size = config.get("bbox_tile_size", 5000)
     max_coord = config.get("bbox_max_coord", 30000)
 
@@ -285,6 +311,9 @@ def scrape_match(session, config, performance_id, match_label):
         for y in range(0, max_coord, tile_size):
             tile_count += 1
             features = fetch_seats_for_bbox(session, config, performance_id, x, y, tile_size, tile_size)
+            if features == "CAPTCHA":
+                print(f"\n  CAPTCHA detected at tile {tile_count}/{total_tiles}!")
+                return "CAPTCHA"
             for feat in features:
                 seat_id = feat.get("id") or feat.get("properties", {}).get("id")
                 if seat_id and seat_id not in all_seats:
@@ -303,11 +332,11 @@ def scrape_match(session, config, performance_id, match_label):
 
 # ── CSV output ──────────────────────────────────────────────────────
 
-CSV_FIELDNAMES = ["Pull Date", "Pull Time", "Match", "Category", "Section", "Area", "Row", "Seat", "Raw Amount", "Price", "Price w/ Fees"]
+CSV_FIELDNAMES = ["Pull Date", "Pull Time", "Match", "Category", "Section", "Area", "Row", "Seat", "Raw Amount", "Price", "Price w/ Fees", "Location"]
 COMBINED_CSV_PATH = os.path.join(DATA_DIR, "fifa-resale-tickets.csv")
 
 
-def seats_to_rows(seats, match_label):
+def seats_to_rows(seats, match_label, location=""):
     """Convert raw seat features to flat CSV rows."""
     now = datetime.now()
     pull_date = now.strftime("%Y-%m-%d")
@@ -336,6 +365,7 @@ def seats_to_rows(seats, match_label):
             "Raw Amount": raw_amount,
             "Price": f"{price:.2f}",
             "Price w/ Fees": f"{price_with_fees:.2f}",
+            "Location": location,
         })
     return rows
 
@@ -382,10 +412,13 @@ def prompt_match_selection(matches):
     for i, m in enumerate(available, 1):
         status = f"[{m['availability'].upper()}]" if m["availability"] == "limited" else ""
         desc = m.get("description", m["match_code"]) or m["performance_id"]
-        print(f"  {i:3d}. {m['match_code']:6s} {desc[:80]} {status}")
+        loc = m.get("location", "")
+        loc_str = f" — {loc}" if loc else ""
+        print(f"  {i:3d}. {m['match_code']:6s} {desc[:80]}{loc_str} {status}")
 
     print(f"\n{'='*70}")
-    print("Enter match numbers to scrape (comma-separated), 'all', or 'q' to quit:")
+    print("Enter match numbers (comma-separated, ranges like 5-10, -10, 20-),")
+    print("'all', or 'q' to quit:")
     choice = input("> ").strip()
 
     if choice.lower() == "q":
@@ -393,16 +426,25 @@ def prompt_match_selection(matches):
     if choice.lower() == "all":
         return available
 
-    selected = []
+    indices = set()
+    n = len(available)
     for part in choice.split(","):
         part = part.strip()
-        if part.isdigit():
-            idx = int(part) - 1
-            if 0 <= idx < len(available):
-                selected.append(available[idx])
+        range_match = re.match(r'^(\d+)?-(\d+)?$', part)
+        if range_match:
+            start = int(range_match.group(1)) if range_match.group(1) else 1
+            end = int(range_match.group(2)) if range_match.group(2) else n
+            for idx in range(start, end + 1):
+                if 1 <= idx <= n:
+                    indices.add(idx)
+        elif part.isdigit():
+            idx = int(part)
+            if 1 <= idx <= n:
+                indices.add(idx)
             else:
                 print(f"  Skipping invalid index: {part}")
-    return selected
+
+    return [available[i - 1] for i in sorted(indices)]
 
 
 # ── Main ────────────────────────────────────────────────────────────
@@ -457,19 +499,36 @@ def main():
     print(f"Output: {csv_path}\n")
 
     total_seats = 0
+    last_success = None
+    captcha_hit = False
     for i, match in enumerate(selected):
         label = match["match_code"] if match["match_code"] else match["performance_id"]
         seats = scrape_match(session, config, match["performance_id"], label)
 
+        if seats == "CAPTCHA":
+            captcha_hit = True
+            print(f"\n{'!'*70}")
+            print(f"CAPTCHA triggered during match {label} (#{i+1} of {len(selected)}).")
+            if last_success:
+                print(f"Last successful match: {last_success}")
+            else:
+                print("No matches were completed successfully.")
+            print(f"Total seats saved before stop: {total_seats}")
+            print(f"Re-run with --new-cookies and resume from where you left off.")
+            print(f"{'!'*70}")
+            break
+
         if seats:
             if DEBUG_MODE:
                 save_debug_json(seats, label)
-            rows = seats_to_rows(seats, label)
+            rows = seats_to_rows(seats, label, location=match.get("location", ""))
             save_to_csv(rows, csv_path)
             total_seats += len(rows)
+            last_success = label
             print(f"  {label}: {len(rows)} seats saved")
         else:
             print(f"  {label}: no seats found")
+            last_success = label  # still counts as successful (just empty)
 
         # Pause between matches (skip after the last one)
         if i < len(selected) - 1:
@@ -477,7 +536,10 @@ def main():
             print(f"  Pausing {pause:.0f}s before next match...")
             time.sleep(pause)
 
-    print(f"\nDone! Total: {total_seats} seat records saved.")
+    if not captcha_hit:
+        print(f"\nDone! Total: {total_seats} seat records saved.")
+    else:
+        print(f"\nPartial run. Total: {total_seats} seat records saved.")
     print(f"Timestamped: {csv_path}")
     print(f"Combined:    {COMBINED_CSV_PATH}")
 
