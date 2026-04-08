@@ -232,6 +232,7 @@ yarn-error.log*
 
 # Data
 *.csv
+*.bak
 */logs/*.txt
 */data/*.txt
 
@@ -248,3 +249,6 @@ skills/stop-election-texts/cfg/config.json
 skills/daily-digest/logs/*.png
 skills/daily-digest/debug/* 
 skills/fifa-marketplace/cfg/notes.txt
+skills/fifa-marketplace/cfg/old-*
+skills/fifa-marketplace/.DS_Store
+
