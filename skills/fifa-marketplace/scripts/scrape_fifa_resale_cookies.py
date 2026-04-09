@@ -498,9 +498,17 @@ def main():
     print(f"\nWill scrape {len(selected)} match(es).")
     print(f"Output: {csv_path}\n")
 
+    def fmt_duration(seconds):
+        h = int(seconds) // 3600
+        m = (int(seconds) % 3600) // 60
+        s = int(seconds) % 60
+        return f"{h:02d}:{m:02d}:{s:02d}"
+
     total_seats = 0
     last_success = None
     captcha_hit = False
+    matches_processed = 0
+    run_start = time.time()
     for i, match in enumerate(selected):
         label = match["match_code"] if match["match_code"] else match["performance_id"]
         seats = scrape_match(session, config, match["performance_id"], label)
@@ -530,16 +538,22 @@ def main():
             print(f"  {label}: no seats found")
             last_success = label  # still counts as successful (just empty)
 
+        matches_processed += 1
+
         # Pause between matches (skip after the last one)
         if i < len(selected) - 1:
             pause = random.uniform(8, 12)
             print(f"  Pausing {pause:.0f}s before next match...")
             time.sleep(pause)
 
+    elapsed = time.time() - run_start
+    avg = elapsed / matches_processed if matches_processed > 0 else 0
+    print(f"\n{matches_processed} matches processed in {fmt_duration(elapsed)} ({fmt_duration(avg)} avg. per match)")
+
     if not captcha_hit:
-        print(f"\nDone! Total: {total_seats} seat records saved.")
+        print(f"Done! Total: {total_seats} seat records saved.")
     else:
-        print(f"\nPartial run. Total: {total_seats} seat records saved.")
+        print(f"Partial run. Total: {total_seats} seat records saved.")
     print(f"Timestamped: {csv_path}")
     print(f"Combined:    {COMBINED_CSV_PATH}")
 

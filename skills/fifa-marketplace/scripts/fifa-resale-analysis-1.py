@@ -102,8 +102,8 @@ df_all_xtab.to_csv(DATA_DIR / "fifa-resale-tickets-daily-xtab.csv")
 # * How many seats existed on the Apr 3 snapshot, but not Apr 6?
 # * How many are listed in the Apr 6 snapshot, but not the 3rd?
 
-DATE_A = "2026-04-03"
-DATE_B = "2026-04-06"
+DATE_A = "2026-04-06"
+DATE_B = "2026-04-07"
 
 seats_a = df_tix_daily[df_tix_daily["Pull Date"] == DATE_A].groupby("Match")["seat_key"].apply(set)
 seats_b = df_tix_daily[df_tix_daily["Pull Date"] == DATE_B].groupby("Match")["seat_key"].apply(set)
@@ -137,7 +137,7 @@ df_seat_churn.to_csv(DATA_DIR / "fifa-resale-tickets-seat-churn.csv")
 # with 3 histograms stacked verticall for the 3 categories above.
 
 list_matches = [18, 47]
-list_categories = ["Category 1"]
+list_categories = ["Category 1", "Category 2", "Category 3"]
 bin_width = 100  # set to None to use 20 equal-width bins up to 95th percentile
 
 snap_a = df_tix_daily[df_tix_daily["Pull Date"] == DATE_A].set_index("seat_key")
