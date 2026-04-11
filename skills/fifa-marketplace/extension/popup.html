@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: monospace; width: 340px; padding: 10px; font-size: 12px; margin: 0; }
+    h3 { margin: 0 0 8px; font-size: 14px; }
+
+    .status-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+    .badge { padding: 2px 6px; border-radius: 3px; font-size: 11px; }
+    .green  { background: #d4edda; color: #155724; }
+    .red    { background: #f8d7da; color: #721c24; }
+    .gray   { background: #e2e3e5; color: #383d41; }
+    .yellow { background: #fff3cd; color: #856404; }
+
+    .stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 8px; }
+    .stat  { text-align: center; background: #f8f9fa; padding: 4px; border-radius: 3px; }
+    .stat-val { font-size: 18px; font-weight: bold; }
+    .stat-lbl { font-size: 10px; color: #666; }
+
+    .section { margin-bottom: 8px; }
+    .section-title { font-weight: bold; font-size: 11px; color: #555; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    .buttons { display: flex; gap: 5px; margin-bottom: 8px; }
+    button { flex: 1; padding: 5px 4px; cursor: pointer; border: 1px solid #ccc; border-radius: 3px; font-size: 11px; }
+    button.primary { background: #007bff; color: white; border-color: #007bff; }
+    button.success { background: #28a745; color: white; border-color: #28a745; }
+    button.danger  { background: #dc3545; color: white; border-color: #dc3545; }
+    button.warning { background: #ffc107; color: #212529; border-color: #ffc107; }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    #match-list-container { max-height: 130px; overflow-y: auto; border: 1px solid #ddd; border-radius: 3px; margin-bottom: 5px; }
+    .match-item { display: flex; align-items: center; gap: 6px; padding: 3px 6px; cursor: pointer; }
+    .match-item:hover { background: #f0f0f0; }
+    .match-item.current { background: #cce5ff; }
+    .match-item.done { color: #888; }
+    .match-item input[type=checkbox] { margin: 0; }
+    .match-code { font-weight: bold; min-width: 38px; }
+    .match-loc  { color: #555; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .match-avail { font-size: 10px; }
+    .avail-limited { color: #856404; }
+
+    .select-btns { display: flex; gap: 4px; margin-bottom: 4px; }
+    .select-btns button { font-size: 10px; padding: 2px 6px; flex: unset; }
+
+    #cycle-progress { font-size: 11px; color: #555; margin-bottom: 4px; min-height: 14px; }
+
+    #log { height: 100px; overflow-y: auto; background: #212529; color: #adb5bd;
+           padding: 6px; border-radius: 3px; font-size: 10px; line-height: 1.4; }
+
+    .divider { border: none; border-top: 1px solid #e0e0e0; margin: 8px 0; }
+  </style>
+</head>
+<body>
+  <h3>FIFA Marketplace Price Scanner</h3>
+
+  <div class="status-row">
+    <span>Receiver:</span><span id="receiver-badge" class="badge gray">checking...</span>
+    <span>Autopan:</span><span id="autopan-badge" class="badge gray">idle</span>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-val" id="stat-tiles">0</div><div class="stat-lbl">tiles</div></div>
+    <div class="stat"><div class="stat-val" id="stat-seats">0</div><div class="stat-lbl">seats</div></div>
+    <div class="stat"><div class="stat-val" id="stat-errors">0</div><div class="stat-lbl">errors</div></div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- Single match manual autopan -->
+  <div class="section">
+    <div class="section-title">Current Page</div>
+    <div class="buttons">
+      <button id="btn-autopan" class="primary">Start Autopan</button>
+      <button id="btn-stop" class="danger" disabled>Stop</button>
+      <button id="btn-reset">Reset Stats</button>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- Match cycling -->
+  <div class="section">
+    <div class="section-title">Cycle Matches</div>
+    <div id="cycle-progress">Load matches to begin.</div>
+
+    <div class="select-btns">
+      <button id="btn-load-matches">Load</button>
+      <button id="btn-select-all">All</button>
+      <button id="btn-select-none">None</button>
+      <button id="btn-select-avail">Available only</button>
+    </div>
+
+    <div id="match-list-container">
+      <div id="match-list" style="color:#888; padding:6px; font-size:11px;">
+        Click "Load" to fetch match list from receiver.
+      </div>
+    </div>
+
+    <div class="buttons">
+      <button id="btn-run-cycle" class="success" disabled>Run Selected</button>
+      <button id="btn-stop-cycle" class="danger" disabled>Stop Cycle</button>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <div id="log">Waiting...</div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

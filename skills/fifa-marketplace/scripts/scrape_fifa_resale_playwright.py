@@ -1,27 +1,44 @@
 #!/usr/bin/env python3
 """
-FIFA World Cup 2026 Ticket Resale Marketplace Scraper (Cookie mode)
-=======================================================================
-APPROACH: Static cookies + curl_cffi (Chrome TLS impersonation)
+FIFA World Cup 2026 Ticket Resale Marketplace Scraper
+======================================================================
+GENERATION 3: Playwright — attached Chrome, JS fetch() injection
 
-Limitations: DataDome's JS sensor periodically refreshes the `datadome`
-cookie in a real browser. This script uses a static copy, so the cookie
-goes stale after a short window and requests start returning 403.
-Works reliably for ~2-3 matches before DataDome blocks the session.
+Limitation: Even when attached to a real Chrome instance, Playwright's
+CDP connection is detected by DataDome's JS sensor, triggering immediate
+"unusual activity" blocks.
 
-Superseded by: scrape_fifa_resale_playwright.py (attached Chrome mode)
-=======================================================================
+Superseded by: scrape_fifa_resale_cdp.py (Gen 4)
+======================================================================
 
-No browser automation — you log in with your normal browser, grab the
-cookies from dev tools, and paste them here. The script uses plain HTTP
-requests with your session cookies to hit the seatmap API.
+(Playwright / attached Chrome mode)
+==========================================================================================
+APPROACH: Attach to your running Chrome instance via remote debugging and fire
+fetch() calls from within the real browser context.
+
+Why this works where the cookie script doesn't:
+  DataDome's JS sensor runs inside the browser and continuously refreshes the
+  `datadome` cookie. A static cookie copy (used by scrape_fifa_resale_cookies.py)
+  goes stale after a few minutes/requests. By making requests through the real
+  browser, the sensor keeps running naturally and the session never expires.
+
+Replaces: scrape_fifa_resale_cookies.py (static cookies + curl_cffi)
+==========================================================================================
+
+Setup (one-time):
+  pip install playwright
+  playwright install chromium   # only needed if using the fallback launch mode
 
 Usage:
-    python3 scripts/scrape_fifa_resale_cookies.py
+  1. Launch Chrome with remote debugging enabled:
+       /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome
+         --remote-debugging-port=9222 --profile-directory="Default"
+  2. In that Chrome, log into https://fwc26-resale-usd.tickets.fifa.com
+  3. Run this script:
+       python3 scripts/scrape_fifa_resale_playwright.py
 
-On first run it will ask you to paste cookies. They get saved to
-cfg/cookies.txt so you don't have to paste them every time. Delete
-that file or re-run with --new-cookies to refresh.
+The script connects to the running Chrome on port 9222 and fires all API
+requests via page.evaluate() (JavaScript fetch) inside that browser context.
 """
 
 import csv
@@ -35,7 +52,7 @@ import time
 from datetime import datetime
 from urllib.parse import urlencode
 
-from curl_cffi import requests
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SKILL_DIR = os.path.dirname(SCRIPT_DIR)
@@ -49,9 +66,11 @@ os.makedirs(LOG_DIR, exist_ok=True)
 os.makedirs(DEBUG_DIR, exist_ok=True)
 
 LOG_PATH = os.path.join(LOG_DIR, "fifa-marketplace.log")
-COOKIES_PATH = os.path.join(CFG_DIR, "cookies.txt")
 MATCHES_CACHE_PATH = os.path.join(CFG_DIR, "matches.json")
 DEBUG_MODE = os.environ.get("DEBUG", "").lower() in ("1", "true", "yes")
+
+CHROME_DEBUGGING_PORT = int(os.environ.get("CHROME_PORT", "9222"))
+RESALE_BASE_URL = "https://fwc26-resale-usd.tickets.fifa.com"
 
 logging.basicConfig(
     level=logging.DEBUG if DEBUG_MODE else logging.INFO,
@@ -63,22 +82,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger("fifa-marketplace")
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
-    "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
-    "Referer": "https://fwc26-resale-usd.tickets.fifa.com/",
-    "X-Secutix-Host": "fwc26-resale-usd.tickets.fifa.com",
-    "sec-ch-ua": '"Google Chrome";v="146", "Chromium";v="146", "Not/A)Brand";v="99"',
-    "sec-ch-ua-mobile": "?0",
-    "sec-ch-ua-platform": '"macOS"',
-    "sec-fetch-site": "same-origin",
-    "sec-fetch-mode": "cors",
-    "sec-fetch-dest": "empty",
-    "Connection": "keep-alive",
-}
-
 
 # ── Config ──────────────────────────────────────────────────────────
 
@@ -88,66 +91,74 @@ def load_config():
         return json.load(f)
 
 
-# ── Cookies ─────────────────────────────────────────────────────────
+# ── Browser connection ───────────────────────────────────────────────
 
-def parse_cookie_string(cookie_str):
-    """Parse a 'key=value; key2=value2' cookie header string into a dict."""
-    cookies = {}
-    for part in cookie_str.split(";"):
-        part = part.strip()
-        if "=" in part:
-            key, value = part.split("=", 1)
-            cookies[key.strip()] = value.strip()
-    return cookies
-
-
-def get_cookies(force_new=False):
-    """Load cookies from cache or prompt user to paste them."""
-    if not force_new and os.path.exists(COOKIES_PATH):
-        with open(COOKIES_PATH) as f:
-            cookie_str = f.read().strip()
-        if cookie_str:
-            cookies = parse_cookie_string(cookie_str)
-            logger.info(f"Loaded {len(cookies)} cookies from {COOKIES_PATH}")
-            return cookies
-
-    print("\n" + "=" * 70)
-    print("COOKIE SETUP")
-    print("=" * 70)
-    print()
-    print("1. Open your browser and log into the FIFA resale site")
-    print("2. Open DevTools (F12) > Network tab")
-    print("3. Click on any request to fwc26-resale-usd.tickets.fifa.com")
-    print("4. Find the 'Cookie' request header")
-    print("5. Copy the entire cookie string and paste it below")
-    print()
-    print("Paste your cookies (single line), then press ENTER:")
-    cookie_str = input("> ").strip()
-
-    if not cookie_str:
-        print("No cookies provided. Exiting.")
+def connect_to_chrome(playwright):
+    """Connect to the already-running Chrome instance via CDP."""
+    try:
+        browser = playwright.chromium.connect_over_cdp(
+            f"http://127.0.0.1:{CHROME_DEBUGGING_PORT}"
+        )
+        logger.info(f"Connected to Chrome on port {CHROME_DEBUGGING_PORT}")
+        return browser
+    except Exception as e:
+        print(f"\nFailed to connect to Chrome on port {CHROME_DEBUGGING_PORT}: {e}")
+        print()
+        print("Make sure Chrome is running with remote debugging enabled.")
+        print("Quit Chrome completely first, then run:")
+        print()
+        print(f'  /Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome --remote-debugging-port={CHROME_DEBUGGING_PORT} --profile-directory="Default"')
+        print()
+        print("Then log into https://fwc26-resale-usd.tickets.fifa.com in that window.")
         sys.exit(1)
 
-    # Save for reuse
-    with open(COOKIES_PATH, "w") as f:
-        f.write(cookie_str)
-    print(f"Cookies saved to {COOKIES_PATH}")
 
-    return parse_cookie_string(cookie_str)
+def get_or_create_page(browser):
+    """Return a page already on the FIFA resale site, or navigate one there."""
+    resale_pages = [
+        p for ctx in browser.contexts
+        for p in ctx.pages
+        if RESALE_BASE_URL in p.url
+    ]
+    if resale_pages:
+        page = resale_pages[0]
+        logger.info(f"Using existing page: {page.url}")
+        return page
+
+    # No page on the site yet — use the first available page and navigate
+    all_pages = [p for ctx in browser.contexts for p in ctx.pages]
+    page = all_pages[0] if all_pages else browser.contexts[0].new_page()
+    print(f"\nNo open tab found on {RESALE_BASE_URL}.")
+    print("Navigating there now — please log in if prompted, then press ENTER here.")
+    page.goto(RESALE_BASE_URL, wait_until="domcontentloaded")
+    input("> ")
+    return page
 
 
-def build_session(cookies):
-    """Build a requests.Session with the cookies and headers."""
-    session = requests.Session(impersonate="chrome136")
-    session.headers.update(HEADERS)
-    session.cookies.update(cookies)
-    return session
+def verify_session(page, config):
+    """Check that the page can reach the seatmap API (i.e. session is live)."""
+    test_url = config["seatmap_api_base"] + "?productId=test&performanceId=test&bbox=0,0,1,1&isExclusive=true&isSeasonTicketMode=false&advantageId=&isModifyAllSeatsMode=false&ppid=&reservationIdx=&crossSellId=&baseOperationIdsString="
+    result = page.evaluate(f"""
+        async () => {{
+            try {{
+                const r = await fetch({json.dumps(test_url)}, {{credentials: 'include'}});
+                return {{ status: r.status }};
+            }} catch(e) {{
+                return {{ status: 0, error: e.toString() }};
+            }}
+        }}
+    """)
+    status = result.get("status", 0)
+    if status == 403:
+        print("\nSession check returned 403 — you may not be logged in.")
+        print(f"Please log into {RESALE_BASE_URL} in the Chrome window, then re-run.")
+        sys.exit(1)
+    logger.info(f"Session check: HTTP {status} (ok)")
 
 
 # ── Match list ──────────────────────────────────────────────────────
 
 def load_cached_matches():
-    """Load previously scraped match list from disk."""
     if os.path.exists(MATCHES_CACHE_PATH):
         with open(MATCHES_CACHE_PATH) as f:
             matches = json.load(f)
@@ -157,22 +168,14 @@ def load_cached_matches():
 
 
 def save_matches_cache(matches):
-    """Save scraped match list to disk for reuse."""
     with open(MATCHES_CACHE_PATH, "w") as f:
         json.dump(matches, f, indent=2)
     logger.info(f"Saved {len(matches)} matches to {MATCHES_CACHE_PATH}")
 
 
 def parse_matches_from_html(html):
-    """Parse match info from the event list page HTML.
-
-    Each match is a <li> block containing:
-    - aria-labelledby with event_code_MXX
-    - onclick with perfId=NNNN in the URL (this is the real performanceId)
-    - class with availability info (limited, sold_out, etc.)
-    """
+    """Parse match info from the event list page HTML."""
     matches = []
-    # Match each <li ...> block that contains 'performance' in its class
     li_pattern = re.compile(
         r'<li\b([^>]*class="[^"]*performance[^"]*"[^>]*)>',
         re.DOTALL,
@@ -180,18 +183,14 @@ def parse_matches_from_html(html):
     for li_match in li_pattern.finditer(html):
         attrs = li_match.group(1)
 
-        # Extract perfId from the onclick URL — this is the correct performanceId
         perf_match = re.search(r'perfId=(\d+)', attrs)
         if not perf_match:
-            # Also check the text after the <li> tag for the onclick
-            # (onclick content may span past the attrs we captured)
             chunk = html[li_match.start():li_match.start() + 2000]
             perf_match = re.search(r'perfId=(\d+)', chunk)
         if not perf_match:
             continue
         perf_id = perf_match.group(1)
 
-        # Extract match code from aria-labelledby
         match_code = ""
         aria_match = re.search(r'aria-labelledby="([^"]*)"', attrs)
         if not aria_match:
@@ -201,14 +200,12 @@ def parse_matches_from_html(html):
             code_match = re.search(r'event_code_(\w+)', aria_match.group(1))
             if code_match:
                 raw_code = code_match.group(1)
-                # Zero-pad to M001 format (M1 → M001, M12 → M012, M104 → M104)
                 num_match = re.match(r'^(M)(\d+)$', raw_code)
                 if num_match:
                     match_code = f"M{int(num_match.group(2)):03d}"
                 else:
                     match_code = raw_code
 
-        # Location: extract venue_XX id from aria-labelledby, then find matching element
         location = ""
         venue_id_match = re.search(r'venue_(\w+)', aria_match.group(1) if aria_match else "")
         if venue_id_match:
@@ -221,7 +218,6 @@ def parse_matches_from_html(html):
             if venue_hit:
                 location = venue_hit.group(1)
 
-        # Availability from class
         availability = "available"
         if "sold_out" in attrs:
             availability = "sold_out"
@@ -275,8 +271,8 @@ def prompt_for_html():
 
 # ── Seat scraping ───────────────────────────────────────────────────
 
-def fetch_seats_for_bbox(session, config, performance_id, x, y, w, h):
-    """Fetch seats from the seatmap API for a given bbox tile."""
+def fetch_seats_for_bbox(page, config, performance_id, x, y, w, h):
+    """Fetch seats via fetch() executed inside the real browser context."""
     params = {
         "productId": config["product_id"],
         "performanceId": performance_id,
@@ -292,29 +288,46 @@ def fetch_seats_for_bbox(session, config, performance_id, x, y, w, h):
     }
     url = f"{config['seatmap_api_base']}?{urlencode(params)}"
 
+    js = f"""
+        async () => {{
+            const r = await fetch({json.dumps(url)}, {{
+                method: 'GET',
+                credentials: 'include',
+                headers: {{
+                    'Accept': 'application/json, text/plain, */*',
+                    'X-Secutix-Host': 'fwc26-resale-usd.tickets.fifa.com',
+                }}
+            }});
+            if (!r.ok) {{
+                const body = await r.text();
+                return {{ error: r.status, body: body.substring(0, 500) }};
+            }}
+            return {{ data: await r.json() }};
+        }}
+    """
+
     try:
-        resp = session.get(url)
-        if resp.status_code != 200:
-            body = resp.text[:500]
-            logger.warning(f"  bbox ({x},{y},{w},{h}): HTTP {resp.status_code} — {body}")
-            if resp.status_code == 403 and "captcha-delivery.com" in body:
-                logger.error("CAPTCHA detected — stopping immediately")
-                return "CAPTCHA"
-            return []
-        data = resp.json()
-        features = data.get("features", [])
-        logger.debug(f"  bbox ({x},{y},{w},{h}): {len(features)} seats")
-        return features
+        result = page.evaluate(js)
     except Exception as e:
-        logger.error(f"  bbox ({x},{y},{w},{h}): error: {e}")
+        logger.error(f"  bbox ({x},{y},{w},{h}): JS error: {e}")
         return []
 
+    if "error" in result:
+        status = result["error"]
+        body = result.get("body", "")
+        logger.warning(f"  bbox ({x},{y},{w},{h}): HTTP {status} — {body}")
+        if status == 403 and "captcha-delivery.com" in body:
+            logger.error("CAPTCHA detected — stopping immediately")
+            return "CAPTCHA"
+        return []
 
-def scrape_match(session, config, performance_id, match_label):
-    """Scrape all seats for a match by tiling bbox across the venue.
+    features = result.get("data", {}).get("features", [])
+    logger.debug(f"  bbox ({x},{y},{w},{h}): {len(features)} seats")
+    return features
 
-    Returns list of seat features, or "CAPTCHA" if captcha was triggered.
-    """
+
+def scrape_match(page, config, performance_id, match_label):
+    """Scrape all seats for a match by tiling bbox across the venue."""
     tile_size = config.get("bbox_tile_size", 5000)
     max_coord = config.get("bbox_max_coord", 30000)
 
@@ -328,7 +341,7 @@ def scrape_match(session, config, performance_id, match_label):
     for x in range(0, max_coord, tile_size):
         for y in range(0, max_coord, tile_size):
             tile_count += 1
-            features = fetch_seats_for_bbox(session, config, performance_id, x, y, tile_size, tile_size)
+            features = fetch_seats_for_bbox(page, config, performance_id, x, y, tile_size, tile_size)
             if features == "CAPTCHA":
                 print(f"\n  CAPTCHA detected at tile {tile_count}/{total_tiles}!")
                 return "CAPTCHA"
@@ -337,7 +350,6 @@ def scrape_match(session, config, performance_id, match_label):
                 if seat_id and seat_id not in all_seats:
                     all_seats[seat_id] = feat
 
-            # Progress indicator
             if tile_count % 6 == 0:
                 print(f"\r  Tiles: {tile_count}/{total_tiles}, unique seats so far: {len(all_seats)}", end="", flush=True)
 
@@ -355,7 +367,6 @@ COMBINED_CSV_PATH = os.path.join(DATA_DIR, "fifa-resale-tickets.csv")
 
 
 def seats_to_rows(seats, match_label, location=""):
-    """Convert raw seat features to flat CSV rows."""
     now = datetime.now()
     pull_date = now.strftime("%Y-%m-%d")
     pull_time = now.strftime("%H:%M")
@@ -469,100 +480,93 @@ def prompt_match_selection(matches):
 
 def main():
     config = load_config()
-    force_new_cookies = "--new-cookies" in sys.argv
 
     print("=" * 70)
     print("FIFA World Cup 2026 - Ticket Resale Marketplace Scraper")
-    print("(Cookie mode — no browser automation)")
+    print("(Playwright mode — attached Chrome, requests run in browser context)")
     print("=" * 70)
 
-    # Get cookies
-    cookies = get_cookies(force_new=force_new_cookies)
-    session = build_session(cookies)
+    with sync_playwright() as playwright:
+        browser = connect_to_chrome(playwright)
+        page = get_or_create_page(browser)
 
-    # Test the session with a quick request
-    print("\nTesting session...")
-    test_resp = session.get(config["seatmap_api_base"].rsplit("/", 3)[0])
-    if test_resp.status_code == 403:
-        print("Session returned 403 — cookies may be expired.")
-        print("Re-run with --new-cookies to paste fresh cookies.")
-        sys.exit(1)
-    print("Session looks good.\n")
+        print(f"\nConnected. Active page: {page.url}")
+        print("Verifying session...")
+        verify_session(page, config)
+        print("Session looks good.\n")
 
-    # Load or scrape match list
-    matches = load_cached_matches()
-    if matches:
-        print(f"Using cached match list ({len(matches)} matches).")
-        print("Delete cfg/matches.json to re-scrape.\n")
-    else:
-        matches = prompt_for_html()
+        # Load or scrape match list
+        matches = load_cached_matches()
         if matches:
-            save_matches_cache(matches)
-            print(f"\nParsed and cached {len(matches)} matches.")
+            print(f"Using cached match list ({len(matches)} matches).")
+            print("Delete cfg/matches.json to re-scrape.\n")
         else:
-            print("\nNo matches found in the HTML.")
-            print("Check that the HTML contains <li> elements with class 'performance'.")
-            print(f"You can also manually create {MATCHES_CACHE_PATH}")
-            print('Format: [{"performance_id": "123", "match_code": "M01", "description": "...", "availability": "available"}, ...]')
-            sys.exit(1)
-
-    # Select matches
-    selected = prompt_match_selection(matches)
-    if not selected:
-        print("No matches selected. Exiting.")
-        return
-
-    csv_path = make_csv_path()
-    print(f"\nWill scrape {len(selected)} match(es).")
-    print(f"Output: {csv_path}\n")
-
-    def fmt_duration(seconds):
-        h = int(seconds) // 3600
-        m = (int(seconds) % 3600) // 60
-        s = int(seconds) % 60
-        return f"{h:02d}:{m:02d}:{s:02d}"
-
-    total_seats = 0
-    last_success = None
-    captcha_hit = False
-    matches_processed = 0
-    run_start = time.time()
-    for i, match in enumerate(selected):
-        label = match["match_code"] if match["match_code"] else match["performance_id"]
-        seats = scrape_match(session, config, match["performance_id"], label)
-
-        if seats == "CAPTCHA":
-            captcha_hit = True
-            print(f"\n{'!'*70}")
-            print(f"CAPTCHA triggered during match {label} (#{i+1} of {len(selected)}).")
-            if last_success:
-                print(f"Last successful match: {last_success}")
+            matches = prompt_for_html()
+            if matches:
+                save_matches_cache(matches)
+                print(f"\nParsed and cached {len(matches)} matches.")
             else:
-                print("No matches were completed successfully.")
-            print(f"Total seats saved before stop: {total_seats}")
-            print(f"Re-run with --new-cookies and resume from where you left off.")
-            print(f"{'!'*70}")
-            break
+                print("\nNo matches found in the HTML.")
+                print("Check that the HTML contains <li> elements with class 'performance'.")
+                print(f"You can also manually create {MATCHES_CACHE_PATH}")
+                print('Format: [{"performance_id": "123", "match_code": "M01", "description": "...", "availability": "available"}, ...]')
+                sys.exit(1)
 
-        if seats:
-            if DEBUG_MODE:
-                save_debug_json(seats, label)
-            rows = seats_to_rows(seats, label, location=match.get("location", ""))
-            save_to_csv(rows, csv_path)
-            total_seats += len(rows)
-            last_success = label
-            print(f"  {label}: {len(rows)} seats saved")
-        else:
-            print(f"  {label}: no seats found")
-            last_success = label  # still counts as successful (just empty)
+        selected = prompt_match_selection(matches)
+        if not selected:
+            print("No matches selected. Exiting.")
+            return
 
-        matches_processed += 1
+        csv_path = make_csv_path()
+        print(f"\nWill scrape {len(selected)} match(es).")
+        print(f"Output: {csv_path}\n")
 
-        # Pause between matches (skip after the last one)
-        if i < len(selected) - 1:
-            pause = random.uniform(8, 12)
-            print(f"  Pausing {pause:.0f}s before next match...")
-            time.sleep(pause)
+        def fmt_duration(seconds):
+            h = int(seconds) // 3600
+            m = (int(seconds) % 3600) // 60
+            s = int(seconds) % 60
+            return f"{h:02d}:{m:02d}:{s:02d}"
+
+        total_seats = 0
+        last_success = None
+        captcha_hit = False
+        matches_processed = 0
+        run_start = time.time()
+
+        for i, match in enumerate(selected):
+            label = match["match_code"] if match["match_code"] else match["performance_id"]
+            seats = scrape_match(page, config, match["performance_id"], label)
+
+            if seats == "CAPTCHA":
+                captcha_hit = True
+                print(f"\n{'!'*70}")
+                print(f"CAPTCHA triggered during match {label} (#{i+1} of {len(selected)}).")
+                if last_success:
+                    print(f"Last successful match: {last_success}")
+                else:
+                    print("No matches were completed successfully.")
+                print(f"Total seats saved before stop: {total_seats}")
+                print(f"{'!'*70}")
+                break
+
+            if seats:
+                if DEBUG_MODE:
+                    save_debug_json(seats, label)
+                rows = seats_to_rows(seats, label, location=match.get("location", ""))
+                save_to_csv(rows, csv_path)
+                total_seats += len(rows)
+                last_success = label
+                print(f"  {label}: {len(rows)} seats saved")
+            else:
+                print(f"  {label}: no seats found")
+                last_success = label
+
+            matches_processed += 1
+
+            if i < len(selected) - 1:
+                pause = random.uniform(8, 12)
+                print(f"  Pausing {pause:.0f}s before next match...")
+                time.sleep(pause)
 
     elapsed = time.time() - run_start
     avg = elapsed / matches_processed if matches_processed > 0 else 0

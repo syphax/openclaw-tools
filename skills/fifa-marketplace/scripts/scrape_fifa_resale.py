@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 """
 FIFA World Cup 2026 Ticket Resale Marketplace Scraper
+======================================================================
+GENERATION 1: Playwright — own browser instance
+
+Limitation: Playwright sets navigator.webdriver=true in the browser it
+launches, which DataDome detects immediately and blocks.
+
+Superseded by: scrape_fifa_resale_cookies.py (Gen 2)
+======================================================================
 
 Interactive script that:
 1. Opens a Playwright browser so you can manually log in

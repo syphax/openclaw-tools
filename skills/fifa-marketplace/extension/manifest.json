@@ -1,0 +1,41 @@
+{
+  "manifest_version": 3,
+  "name": "FIFA Marketplace Price Scanner",
+  "version": "1.0",
+  "description": "Captures seatmap tile responses from the FIFA resale marketplace and relays to local receiver",
+
+  "permissions": [
+    "scripting",
+    "storage",
+    "tabs"
+  ],
+
+  "host_permissions": [
+    "https://fwc26-resale-usd.tickets.fifa.com/*",
+    "http://127.0.0.1:7227/*"
+  ],
+
+  "background": {
+    "service_worker": "background.js"
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["https://fwc26-resale-usd.tickets.fifa.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "world": "ISOLATED"
+    },
+    {
+      "matches": ["https://fwc26-resale-usd.tickets.fifa.com/*"],
+      "js": ["injected.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    }
+  ],
+
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "FIFA Marketplace Price Scanner"
+  }
+}
