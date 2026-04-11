@@ -74,6 +74,18 @@ print(f"Matches with {n}+ snapshots:")
 display(df_cnts_by_match[df_cnts_by_match["num_dt"] >= n].sort_values(['max_dt', 'num_dt'], ascending=False))
 
 # %%
+# What are the counts of latest snapshots by date?
+
+df_matches_by_latest_dt = (df_tix_daily.groupby("Match ID").agg(
+    latest_dt=("Pull Date", "max"))).sort_values("latest_dt")
+    
+df_cnts_by_latest_dt = df_matches_by_latest_dt.value_counts().sort_index()
+
+display(df_cnts_by_latest_dt)
+
+#print(df_matches_by_latest_dt.head())
+
+# %%
 # Review a single match
 
 df_single_match = df_tix_raw[df_tix_raw["Match"] == "M18"].copy()
