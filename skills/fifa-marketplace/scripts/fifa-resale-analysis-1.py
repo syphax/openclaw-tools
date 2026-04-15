@@ -10,10 +10,14 @@
 # Import libraries
 
 from pathlib import Path
+import datetime
+
 import pandas as pd
 import numpy as np
+
 import matplotlib.pyplot as plt
 import seaborn as sns
+
 
 try:
     from IPython.display import display
@@ -71,7 +75,20 @@ n = 5
 
 print(f"Matches with {n}+ snapshots:")
 
-display(df_cnts_by_match[df_cnts_by_match["num_dt"] >= n].sort_values(['max_dt', 'num_dt'], ascending=False))
+display(df_cnts_by_match[df_cnts_by_match["num_dt"] >= n].sort_values(['max_dt', 'Match'], ascending=False))
+
+# %%
+# How many with the most recent date?
+
+max_dt = df_tix_raw["Pull Date"].max()
+
+print(f'Latest snapshot date: {max_dt}')
+
+df_current_matches = df_tix_raw[df_tix_raw["Pull Date"] == max_dt].groupby('Match ID').agg(
+    cnt_seats=("seat_key", "nunique")
+).sort_values("Match ID", ascending=False)
+
+display(df_current_matches)
 
 # %%
 # What are the counts of latest snapshots by date?
@@ -95,13 +112,18 @@ df_sm_by_pull = df_single_match.groupby(["Pull Date", 'Pull Time']).agg(
 )
 
 display(df_sm_by_pull)
-# %%
 
-df_all_by_pull = df_tix_daily.groupby(['Match ID', "Pull Date", 'Pull Time']).agg(
+
+# %%
+# Cross tab of matches and dates:
+
+df_all_by_pull = df_tix_daily.groupby(['Match ID', "Pull Date", 'Pull Time'], as_index=False).agg(
     cnt_seats=("seat_key", "nunique"),    
 )
 
-display(df_all_by_pull)
+#display(df_all_by_pull)
+
+display(df_all_by_pull[df_all_by_pull['Match ID'] == 18])
 
 df_all_xtab = df_all_by_pull.reset_index().pivot(index="Match ID", columns="Pull Date", values="cnt_seats")    
 
@@ -140,6 +162,11 @@ display(df_seat_churn)
 df_seat_churn.to_csv(DATA_DIR / "fifa-resale-tickets-seat-churn.csv")   
 
 # %%
+# Check single match - debug
+
+print(df_tix_daily.dtypes)
+
+# %%
 # Histos of sold/removed vs stayed vs added
 
 # For specific matches & categories, what's the distribution of prices across:
@@ -150,62 +177,91 @@ df_seat_churn.to_csv(DATA_DIR / "fifa-resale-tickets-seat-churn.csv")
 # Show each match/category as a seperate chart, 
 # with 3 histograms stacked verticall for the 3 categories above.
 
+
+
 list_matches = [18, 47, 62, 74]
-list_categories = ["Category 1", "Category 2", "Category 3"]
-bin_width = 100  # set to None to use 20 equal-width bins up to 95th percentile
 
-snap_a = df_tix_daily[df_tix_daily["Pull Date"] == DATE_A].set_index("seat_key")
-snap_b = df_tix_daily[df_tix_daily["Pull Date"] == DATE_B].set_index("seat_key")
+list_matches = [18]
 
-for match_id in list_matches:
-    match_str = f"M{match_id}"
-    for cat in list_categories:
-        mask_a = (snap_a["Match"] == match_str) & (snap_a["Category"] == cat)
-        mask_b = (snap_b["Match"] == match_str) & (snap_b["Category"] == cat)
+# Setup
+start_date = pd.to_datetime("2026-04-03")
+end_date = pd.to_datetime(datetime.datetime.now().date())
 
-        keys_a = set(snap_a[mask_a].index)
-        keys_b = set(snap_b[mask_b].index)
+# 1. Create a range of dates from start to (end - 1 day)
+# 'D' frequency ensures we hit every single day
+date_list = pd.date_range(start=start_date, end=end_date - pd.Timedelta(days=1), freq='D')
 
-        prices_sold    = snap_a.loc[snap_a.index.isin(keys_a - keys_b) & mask_a, "Price"]
-        prices_stayed  = snap_b.loc[snap_b.index.isin(keys_a & keys_b)  & mask_b, "Price"]
-        prices_added   = snap_b.loc[snap_b.index.isin(keys_b - keys_a)  & mask_b, "Price"]
+for DATE_A in date_list:
+    # 2. Assign DATE_B as exactly one day after DATE_A
+    DATE_B = DATE_A + pd.Timedelta(days=1)
+    
+    print(f"\nAnalyzing changes from {DATE_A.date()} to {DATE_B.date()}...")
 
-        groups = [
-            (f"Sold/Removed ({len(prices_sold)})", prices_sold,   "tomato"),
-            (f"Stayed ({len(prices_stayed)})",      prices_stayed, "steelblue"),
-            (f"Added ({len(prices_added)})",         prices_added,  "mediumseagreen"),
-        ]
+    list_categories = ["Category 1", "Category 2", "Category 3"]
+    bin_width = 100  # set to None to use 20 equal-width bins up to 95th percentile
 
-        print(f"\n{match_str} — {cat}")
-        print(f"{'Group':<20} {'p10':>8} {'p50':>8} {'p90':>8} {'mean':>8}")
-        print("-" * 52)
-        for label, prices, _ in groups:
-            if len(prices):
-                print(f"{label:<20} {prices.quantile(0.10):>8.0f} {prices.quantile(0.50):>8.0f} "
-                      f"{prices.quantile(0.90):>8.0f} {prices.mean():>8.0f}")
+# Convert Timestamps to strings
+    str_a = DATE_A.strftime('%Y-%m-%d')
+    str_b = DATE_B.strftime('%Y-%m-%d')
+    
+    # Filter using the strings
+    snap_a = df_tix_daily[df_tix_daily["Pull Date"] == str_a].set_index("seat_key")
+    snap_b = df_tix_daily[df_tix_daily["Pull Date"] == str_b].set_index("seat_key")
+
+    for match_id in list_matches:
+        match_str = f"M{match_id}"
+        for cat in list_categories:
+            mask_a = (snap_a["Match"] == match_str) & (snap_a["Category"] == cat)
+            mask_b = (snap_b["Match"] == match_str) & (snap_b["Category"] == cat)
+
+            keys_a = set(snap_a[mask_a].index)
+            keys_b = set(snap_b[mask_b].index)
+
+            if len(keys_a) > 0 and len(keys_b) > 0:
+
+                prices_sold    = snap_a.loc[snap_a.index.isin(keys_a - keys_b) & mask_a, "Price"]
+                prices_stayed  = snap_b.loc[snap_b.index.isin(keys_a & keys_b)  & mask_b, "Price"]
+                prices_added   = snap_b.loc[snap_b.index.isin(keys_b - keys_a)  & mask_b, "Price"]
+
+                groups = [
+                    (f"Sold/Removed ({len(prices_sold)})", prices_sold,   "tomato"),
+                    (f"Stayed ({len(prices_stayed)})",      prices_stayed, "steelblue"),
+                    (f"Added ({len(prices_added)})",         prices_added,  "mediumseagreen"),
+                ]
+
+                print(f"\n{match_str} — {cat}")
+                print(f"{'Group':<20} {'p10':>8} {'p50':>8} {'p90':>8} {'mean':>8}")
+                print("-" * 52)
+                for label, prices, _ in groups:
+                    if len(prices):
+                        print(f"{label:<20} {prices.quantile(0.10):>8.0f} {prices.quantile(0.50):>8.0f} "
+                            f"{prices.quantile(0.90):>8.0f} {prices.mean():>8.0f}")
+                    else:
+                        print(f"{label:<20} {'—':>8} {'—':>8} {'—':>8} {'—':>8}")
+
+                all_prices = pd.concat([prices_sold, prices_stayed, prices_added])
+                x_max = all_prices.quantile(0.95)
+                x_min = all_prices.min()
+                if bin_width is not None:
+                    bins = np.arange(x_min // bin_width * bin_width, x_max + bin_width, bin_width)
+                else:
+                    bins = np.linspace(x_min, x_max, 21)  # 20 equal-width bins up to 95th pct
+
+                fig, axes = plt.subplots(3, 1, figsize=(10, 9), sharex=True)
+                fig.suptitle(f"{match_str} — {cat}\n{DATE_A} vs {DATE_B}", fontsize=13)
+
+                for ax, (label, prices, color) in zip(axes, groups):
+                    ax.hist(prices.clip(upper=x_max), bins=bins, color=color, edgecolor="white", alpha=0.85)
+                    ax.set_ylabel("Count")
+                    ax.set_title(label, fontsize=11)
+
+                axes[-1].set_xlabel("Price")
+                axes[-1].set_xlim(x_min, x_max)
+                plt.tight_layout()
+                plt.show()
+            
             else:
-                print(f"{label:<20} {'—':>8} {'—':>8} {'—':>8} {'—':>8}")
-
-        all_prices = pd.concat([prices_sold, prices_stayed, prices_added])
-        x_max = all_prices.quantile(0.95)
-        x_min = all_prices.min()
-        if bin_width is not None:
-            bins = np.arange(x_min // bin_width * bin_width, x_max + bin_width, bin_width)
-        else:
-            bins = np.linspace(x_min, x_max, 21)  # 20 equal-width bins up to 95th pct
-
-        fig, axes = plt.subplots(3, 1, figsize=(10, 9), sharex=True)
-        fig.suptitle(f"{match_str} — {cat}\n{DATE_A} vs {DATE_B}", fontsize=13)
-
-        for ax, (label, prices, color) in zip(axes, groups):
-            ax.hist(prices.clip(upper=x_max), bins=bins, color=color, edgecolor="white", alpha=0.85)
-            ax.set_ylabel("Count")
-            ax.set_title(label, fontsize=11)
-
-        axes[-1].set_xlabel("Price")
-        axes[-1].set_xlim(x_min, x_max)
-        plt.tight_layout()
-        plt.show()
+                print(f'{len(keys_a)} seats on {DATE_A}, {len(keys_b)} seats on {DATE_B} — skipping {match_str} / {cat} due to insufficient data.')
 
 
 # %%

@@ -6,7 +6,7 @@ GENERATION 7 companion: receives seatmap tile data from the Chrome extension
 and writes to CSV. No HTTP requests, no browser automation — pure data sink.
 
 Usage:
-  python3 scripts/receive_tiles.py
+  python3 scripts/data_receiver.py
 
 Then install the extension in Chrome (chrome://extensions → Load unpacked →
 select skills/fifa-marketplace/extension/) and browse the seatmap. The popup
@@ -40,6 +40,7 @@ os.makedirs(DEBUG_DIR, exist_ok=True)
 PORT = 7227
 LOG_PATH = os.path.join(LOG_DIR, "fifa-marketplace.log")
 COMBINED_CSV_PATH = os.path.join(DATA_DIR, "fifa-resale-tickets.csv")
+COMPLETIONS_PATH = os.path.join(DATA_DIR, "match-completions.json")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -57,6 +58,23 @@ CSV_FIELDNAMES = [
 ]
 
 # ── State ─────────────────────────────────────────────────────────────
+
+# Match completions: {performance_id: unix_timestamp}
+# Loaded from disk at startup, updated as matches finish.
+def load_completions():
+    if os.path.exists(COMPLETIONS_PATH):
+        try:
+            with open(COMPLETIONS_PATH) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+def save_completions(data):
+    with open(COMPLETIONS_PATH, "w") as f:
+        json.dump(data, f, indent=2)
+
+match_completions = load_completions()
 
 # Global dedup set: (match_label, seat_id)
 seen_seats = set()
@@ -169,12 +187,51 @@ class TileHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps(matches).encode())
 
+        elif self.path == "/completions":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_cors()
+            self.end_headers()
+            self.wfile.write(json.dumps(match_completions).encode())
+
         else:
             self.send_response(404)
             self.end_headers()
 
     def do_POST(self):
         global total_tiles, total_seats
+
+        if self.path == "/completions/clear":
+            global match_completions
+            match_completions = {}
+            save_completions(match_completions)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_cors()
+            self.end_headers()
+            self.wfile.write(b'{"ok":true}')
+            logger.info("Completions cleared")
+            return
+
+        if self.path == "/complete":
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_cors()
+            self.end_headers()
+            self.wfile.write(b'{"ok":true}')
+            try:
+                payload = json.loads(body)
+                perf_id = payload.get("performance_id", "")
+                match_code = payload.get("match_code", perf_id)
+                if perf_id:
+                    match_completions[perf_id] = time.time()
+                    save_completions(match_completions)
+                    logger.info(f"Marked complete: {match_code} ({perf_id})")
+            except Exception as e:
+                logger.warning(f"Completion parse error: {e}")
+            return
 
         if self.path != "/tile":
             self.send_response(404)

@@ -218,6 +218,7 @@ node_modules/
 dist/
 *.js
 *.js.map
+!skills/fifa-marketplace/extension/*.js
 
 # Logs
 npm-debug.log*

@@ -1,15 +1,46 @@
 # FIFA Marketplace — Resale Ticket Scraper
 
-Semi-manual tool for pulling seat-level ticket data from the FIFA World Cup 2026 official resale marketplace (`fwc26-resale-usd.tickets.fifa.com`).
+Pulls seat-level ticket data from the FIFA World Cup 2026 official resale marketplace (`fwc26-resale-usd.tickets.fifa.com`).
 
-The site has aggressive bot detection, so the script uses your real browser session cookies rather than browser automation. You log in manually, copy your cookies, and the script handles the rest via plain HTTP requests.
+The site has aggressive bot detection (DataDome). Rather than making direct HTTP requests, the tool uses a Chrome extension running in your real browser session. The extension intercepts the seatmap tile API responses that the page itself makes as you browse, then forwards them to a local Python server which writes them to CSV.
 
-## Prerequisites
+## How it works
+
+There are two moving parts that run together:
+
+**Chrome extension** — loaded into your regular Chrome profile, already logged in. It has three layers:
+- `injected.js` (MAIN world) — wraps `window.fetch` to intercept seatmap tile API calls (`/tnwr/v1/secure/seatmap/seats/free/ol`). Runs in the page's own JS context, invisible to DataDome.
+- `content.js` (ISOLATED world) — receives intercepted tile data via `CustomEvent` and relays it to the background worker. Also drives the autopan logic that physically pans the seatmap to trigger tile loads.
+- `background.js` (service worker) — orchestrates match cycling (navigate → settle → autopan → next match), relays tile data to the local Python server, and records match completions.
+
+**`data_receiver.py`** — a local HTTP server on port 7227. Passively receives tile data from the extension and writes it to CSV. Also serves `cfg/matches.json` back to the extension so the popup can display the match list.
+
+### Autopan design
+
+When the extension navigates to a match seatmap, it performs a human-mimicking pan sequence to sweep the entire stadium and trigger all tile loads:
+
+- **Pre-map browsing** — scrolls the page slightly before touching the map (~2s)
+- **Mouse approach** — moves the cursor from a random position on the map to the drag start point with eased movement, so the first event on the map is never a cold `mousedown`
+- **Randomized zoom-out** — 3-9 scroll events (varying center and delta), with a 30% chance of an over-scroll + correction
+- **Variable coverage grid** — rows (3-4) and columns (2-3) chosen randomly each run; starting side (left or right) also randomized
+- **Hesitations** — 18% chance per grid position of a 0.6-1.8s pause mid-pan
+- **Bezier drag paths** — all mouse drags follow a slightly curved path with ease-in/out timing
+
+### Cycle stealth
+
+- **Shuffled match order** — matches are processed in random order each run, not sequentially
+- **Skewed between-match delays** — mostly 4-8s, occasionally up to 18s
+- **Session breaks** — every 7-12 matches, the cycle pauses 60-90s before continuing
+- **Completion tracking** — finished matches are written to `data/match-completions.json` (with timestamps). On restart, any match done in the past 6 hours is automatically skipped and shown as unchecked in the popup.
+
+## Setup
+
+### Prerequisites
 
 - Python 3.10+
-- A FIFA tickets account with access to the resale marketplace
+- Chrome (with a FIFA tickets account logged in)
 
-Install dependencies (from the `fifa-marketplace/` directory):
+Install Python dependencies (from the `fifa-marketplace/` directory):
 
 ```bash
 python3 -m venv venv
@@ -17,69 +48,48 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## First-time setup
+### Install the extension
 
-There are two one-time setup steps: providing session cookies and building the match list.
+1. Go to `chrome://extensions`
+2. Enable **Developer mode**
+3. Click **Load unpacked** and select `skills/fifa-marketplace/extension/`
 
-### 1. Get your session cookies
+### Build the match list
 
-1. Open your browser and go to `https://fwc26-resale-usd.tickets.fifa.com`
-2. Log in (you'll need to complete email verification)
-3. Open DevTools (F12) > **Network** tab
-4. Click on any request to `fwc26-resale-usd.tickets.fifa.com`
-5. Find the **Cookie** request header and copy the entire value
+The match list is stored in `cfg/matches.json`. If it doesn't exist or is stale, regenerate it:
 
-On first run the script will prompt you to paste this string. It gets saved to `cfg/cookies.txt` for reuse.
-
-### 2. Build the match list
-
-The FIFA tickets page is a React SPA, so match data can't be fetched via HTTP. You need to provide the rendered HTML once:
-
-1. In your browser, go to `https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026/tickets`
+1. In Chrome, go to `https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026/tickets`
 2. Wait for the full match list to load
-3. Open DevTools > **Console** tab and run:
+3. Open DevTools > **Console** and run:
    ```js
    copy(document.documentElement.outerHTML)
    ```
-4. Paste the clipboard contents into `cfg/event-page.html`
+4. Paste the clipboard into `cfg/event-page.html`
+5. Run the parser (TBD — currently matches.json is maintained manually or via a separate parse step)
 
-On first run (when `cfg/matches.json` doesn't exist), the script will parse this HTML and cache the match list. Delete `cfg/matches.json` to regenerate it.
+## Running
 
-## Running the scraper
+Start the receiver first, then use the extension popup to run the cycle:
 
 ```bash
 source venv/bin/activate
-python3 scripts/scrape_fifa_resale_cookies.py
+python3 scripts/data_receiver.py
 ```
 
-The script will:
-1. Validate your session cookies
-2. Load the cached match list
-3. Show available matches and prompt you to select which to scrape
+Then open the extension popup:
 
-### Selecting matches
+1. Click **Load** to fetch the match list from the receiver
+2. Adjust selection (sold-out matches are pre-unchecked; recently-done matches are grayed out)
+3. Click **Run Selected** — the extension cycles through all selected matches automatically
 
-At the selection prompt you can enter:
-- Individual numbers: `1,3,5`
-- Ranges: `10-20` (matches 10 through 20 inclusive)
-- Open ranges: `-10` (first 10), `20-` (20 through the end)
-- Mix: `1,3,10-20,50-`
-- `all` for everything, `q` to quit
-
-### Flags
-
-| Flag | Description |
-|------|-------------|
-| `--new-cookies` | Force re-paste of cookies (use when session expires) |
-
-Set `DEBUG=1` to enable verbose logging and save raw API responses to `debug/`.
+You can also click **Start Autopan** to manually pan the current tab without cycling.
 
 ## Output
 
 Each run produces two CSV files:
 
-- `data/fifa-resale-tickets-YYYY-MM-DD-HH-MM.csv` — timestamped snapshot
-- `data/fifa-resale-tickets.csv` — combined/appended across all runs
+- `data/fifa-resale-tickets-YYYY-MM-DD-HH-MM.csv` — snapshot for this run
+- `data/fifa-resale-tickets.csv` — combined across all runs (appended)
 
 CSV columns:
 
@@ -87,53 +97,57 @@ CSV columns:
 |--------|-------------|
 | Pull Date | Date of the data pull (YYYY-MM-DD) |
 | Pull Time | Time of the data pull (HH:MM) |
-| Match | Match code (M001-M104) |
+| Match | Match code (e.g. M001) or performance ID |
 | Category | Seat category (e.g. CAT1, CAT2) |
-| Section | Section/block name |
+| Section | Block/section name |
 | Area | Area name |
 | Row | Row identifier |
 | Seat | Seat number |
 | Raw Amount | Raw price from API (thousandths of dollars) |
 | Price | Base price in USD (Raw Amount / 1000) |
-| Price w/ Fees | Price including FIFA's 15% service fee |
-| Location | Stadium name (e.g. "Boston Stadium") |
+| Price w/ Fees | Price with FIFA's 15% service fee |
+| Location | Stadium / city |
 
-There is also a helper script to export the match list:
+There is also a helper script to export the match list to CSV:
 
 ```bash
 python3 scripts/matches_to_csv.py
 ```
-
-This writes `data/matches.csv` from `cfg/matches.json`.
-
-## CAPTCHA / rate limiting
-
-The site will eventually trigger a CAPTCHA if it detects too many requests. The script adds random delays between tiles (0.4-1.2s) and between matches (8-12s) to reduce this risk.
-
-If a CAPTCHA is triggered, the script hard-stops immediately and reports which match it was on and the last match completed successfully. To resume:
-
-1. Re-login in your browser (the CAPTCHA will have invalidated your session)
-2. Copy fresh cookies
-3. Re-run with `--new-cookies` and select the remaining matches using a range (e.g. `15-` to resume from match 15)
 
 ## File layout
 
 ```
 fifa-marketplace/
   cfg/
-    fifa-marketplace-config.json   # API endpoints and parameters
-    matches.json                   # Cached match list (generated, gitignored content)
-    cookies.txt                    # Session cookies (gitignored)
-    event-page.html                # Rendered HTML for match parsing (gitignored)
+    matches.json                        # Match list with performance IDs (gitignored content)
+    event-page.html                     # Source HTML for match parsing (gitignored)
   data/
-    fifa-resale-tickets.csv        # Combined results (gitignored)
-    fifa-resale-tickets-*.csv      # Timestamped snapshots (gitignored)
-    matches.csv                    # Match list export (gitignored)
+    fifa-resale-tickets.csv             # Combined results (gitignored)
+    fifa-resale-tickets-*.csv           # Per-run snapshots (gitignored)
+    match-completions.json              # Completion timestamps for restart filtering (gitignored)
+    matches.csv                         # Match list export (gitignored)
+  extension/
+    manifest.json                       # MV3 Chrome extension manifest
+    injected.js                         # fetch() interceptor (MAIN world)
+    content.js                          # Autopan driver + tile relay (ISOLATED world)
+    background.js                       # Cycle orchestrator + tile forwarder (service worker)
+    popup.html / popup.js               # Extension popup UI
   scripts/
-    scrape_fifa_resale_cookies.py  # Main scraper
-    matches_to_csv.py              # Match list CSV exporter
+    data_receiver.py                    # Local HTTP server (port 7227) — main entry point
+    matches_to_csv.py                   # Match list CSV exporter
+    fifa-resale-analysis-1.py           # Offline analysis of collected data
   logs/
-    fifa-marketplace.log           # Scraper log
-  debug/                           # Raw API responses (when DEBUG=1)
+    fifa-marketplace.log                # Receiver log
+  debug/                                # Raw API responses for debugging
   requirements.txt
 ```
+
+## Bot detection notes
+
+The site uses DataDome. Known signals it watches for:
+- Cold `mousedown` with no prior cursor movement on the element
+- Perfectly straight or mechanically timed mouse paths
+- Consistent session fingerprint (same pattern every match)
+- Too-regular timing between actions
+
+The extension's autopan is designed to avoid all of these. If you start getting blocked mid-session, try increasing `PAGE_SETTLE_MS` in `background.js` (currently 4000ms) to give DataDome more initialization time.
