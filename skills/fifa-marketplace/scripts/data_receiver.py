@@ -82,6 +82,18 @@ total_tiles = 0
 total_seats = 0
 run_start = time.time()
 
+# Per-match accounting for the current run.
+# {perf_id: {"label": str, "seats": int, "tiles": int, "captchas": int}}
+match_stats = {}
+
+OUTCOME_LABELS = {
+    "done": "clean",
+    "rate_limited": "flagged",
+    "aborted": "stopped",
+    "no_product_id": "other",
+    "no_perf_id": "other",
+}
+
 # Timestamped CSV for this run
 run_csv_path = os.path.join(DATA_DIR, f"fifa-resale-tickets-{datetime.now().strftime('%Y-%m-%d-%H-%M')}.csv")
 
@@ -225,10 +237,33 @@ class TileHandler(BaseHTTPRequestHandler):
                 payload = json.loads(body)
                 perf_id = payload.get("performance_id", "")
                 match_code = payload.get("match_code", perf_id)
+                reason = payload.get("reason", "done")
+                outcome = OUTCOME_LABELS.get(reason, reason)
                 if perf_id:
-                    match_completions[perf_id] = time.time()
-                    save_completions(match_completions)
-                    logger.info(f"Marked complete: {match_code} ({perf_id})")
+                    stat = match_stats.get(perf_id, {"seats": 0, "tiles": 0})
+                    # Newline first so we don't clobber the in-place tile line.
+                    print()
+                    if stat["seats"] == 0:
+                        banner = "!" * 70
+                        logger.warning(banner)
+                        logger.warning(
+                            f"!!! ZERO SEATS: {match_code} ({perf_id}) — "
+                            f"{stat['tiles']} tiles, reason={reason}"
+                        )
+                        logger.warning("!!! NOT marking complete — match stays eligible for retry.")
+                        logger.warning(banner)
+                    elif outcome == "flagged":
+                        logger.warning(
+                            f"MATCH {match_code} — {stat['seats']} seats "
+                            f"({stat['tiles']} tiles) — FLAGGED (incomplete, not marking complete)"
+                        )
+                    else:
+                        match_completions[perf_id] = time.time()
+                        save_completions(match_completions)
+                        logger.info(
+                            f"MATCH {match_code} — {stat['seats']} seats "
+                            f"({stat['tiles']} tiles) — {outcome}"
+                        )
             except Exception as e:
                 logger.warning(f"Completion parse error: {e}")
             return
@@ -259,6 +294,15 @@ class TileHandler(BaseHTTPRequestHandler):
 
         match_label, location = extract_match_label(url)
 
+        # Per-match bookkeeping — key by performanceId so we can summarize
+        # on /complete even if the label changes over the run.
+        perf_id = parse_qs(urlparse(url).query).get("performanceId", ["unknown"])[0]
+        stat = match_stats.setdefault(perf_id, {
+            "label": match_label, "seats": 0, "tiles": 0, "captchas": 0,
+        })
+        stat["label"] = match_label
+        stat["tiles"] += 1
+
         new_rows = []
         for feat in features:
             seat_id = feat.get("id") or feat.get("properties", {}).get("id")
@@ -270,13 +314,14 @@ class TileHandler(BaseHTTPRequestHandler):
         if new_rows:
             append_rows(new_rows)
             total_seats += len(new_rows)
+            stat["seats"] += len(new_rows)
 
         elapsed = int(time.time() - run_start)
-        print(
-            f"\r  [{elapsed:4d}s] tiles={total_tiles:4d}  seats={total_seats:5d}  "
-            f"match={match_label}  +{len(new_rows)} new",
-            end="", flush=True,
+        line = (
+            f"  [{elapsed:4d}s] tiles={total_tiles:4d}  seats={total_seats:5d}  "
+            f"match={match_label}"
         )
+        print("\r" + line.ljust(100), end="", flush=True)
 
 
 # ── Main ──────────────────────────────────────────────────────────────

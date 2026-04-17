@@ -39,7 +39,7 @@ print(DATA_DIR)
 
 df_tix_raw = pd.read_csv(DATA_DIR / "fifa-resale-tickets.csv")
 
-print(df_tix_raw.dtypes)
+#print(df_tix_raw.dtypes)
 
 # %%
 # Enhance
@@ -54,8 +54,9 @@ df_tix_raw['Match ID'] = df_tix_raw['Match'].str.extract(r'M(\d+)').astype(int)
 # %%
 # Keep latest pull by date
 
-latest_pull = (df_tix_raw.groupby(["Match", "Pull Date"])["Pull Time"]
+latest_pull = (df_tix_raw.groupby(["seat_key", "Pull Date"])["Pull Time"]
                .transform("max"))
+
 df_tix_daily = df_tix_raw[df_tix_raw["Pull Time"] == latest_pull].copy()
 
 # %%
@@ -86,7 +87,9 @@ print(f'Latest snapshot date: {max_dt}')
 
 df_current_matches = df_tix_raw[df_tix_raw["Pull Date"] == max_dt].groupby('Match ID').agg(
     cnt_seats=("seat_key", "nunique")
-).sort_values("Match ID", ascending=False)
+).sort_values("cnt_seats", ascending=False)
+
+#.sort_values("Match ID", ascending=False)
 
 display(df_current_matches)
 
@@ -105,7 +108,11 @@ display(df_cnts_by_latest_dt)
 # %%
 # Review a single match
 
-df_single_match = df_tix_raw[df_tix_raw["Match"] == "M18"].copy()
+match = "M18"
+
+print(f"Reviewing match: {match}")
+
+df_single_match = df_tix_raw[df_tix_raw["Match"] == match].copy()
 
 df_sm_by_pull = df_single_match.groupby(["Pull Date", 'Pull Time']).agg(
     cnt_seats=("seat_key", "nunique"),    

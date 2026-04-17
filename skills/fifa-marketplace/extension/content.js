@@ -29,7 +29,7 @@ window.addEventListener("__fifaTileCaptcha", (event) => {
 window.addEventListener("__fifaScanDone", (event) => {
   const reason = event.detail?.reason || "done";
   chrome.runtime.sendMessage({ type: "LOG", msg: `Scan finished: ${reason}` });
-  chrome.runtime.sendMessage({ type: "AUTOPAN_STATUS", status: "done" });
+  chrome.runtime.sendMessage({ type: "AUTOPAN_STATUS", status: "done", reason });
 });
 
 // ── Scan trigger ────────────────────────────────────────────────────

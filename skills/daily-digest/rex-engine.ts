@@ -421,6 +421,8 @@ function deliverEmail(subject: string, htmlBody: string): ChannelStatus {
       'send',
       '--account',
       addressCfg.emailFrom,
+      '--from',
+      addressCfg.emailFrom,
       '--to',
       addressCfg.emailTo,
       '--subject',
@@ -511,25 +513,25 @@ async function main() {
     const emailSubject = generateEmailSubject(date);
     console.log(`📧 Email subject: ${emailSubject}`);
 
-    // Step 4: Deterministic rendering — code controls ALL formatting
+    // Step 4: Render message bodies
     const emailBody = renderEmailHtml(structuredOutput, processedData);
-    const whatsappBody = renderWhatsAppText(structuredOutput, processedData);
-    const telegramBody = renderTelegramText(structuredOutput, processedData);
 
-    console.log('\n📝 Content rendered deterministically for all channels.');
+    // Short status-only messages for mobile channels
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    const successMsg = `🦖 Rex: Daily digest created and sent to your email successfully at ${timeStr}.`;
+    const partialMsg = `🦖 Rex: Daily digest created at ${timeStr}, but email delivery failed. Check artifacts.`;
+
+    console.log('\n📝 Content rendered.');
 
     // Step 4b: Preserve rendered artifacts for manual recovery
     const artifactsDir = path.join(outputDir, 'rendered-artifacts');
     if (!fs.existsSync(artifactsDir)) fs.mkdirSync(artifactsDir, { recursive: true });
 
     const emailArtifactPath = path.join(artifactsDir, `email-${date}.html`);
-    const whatsappArtifactPath = path.join(artifactsDir, `whatsapp-${date}.txt`);
-    const telegramArtifactPath = path.join(artifactsDir, `telegram-${date}.txt`);
     const structuredOutputPath = path.join(artifactsDir, `structured-output-${date}.json`);
 
     fs.writeFileSync(emailArtifactPath, emailBody);
-    fs.writeFileSync(whatsappArtifactPath, whatsappBody);
-    fs.writeFileSync(telegramArtifactPath, telegramBody);
     fs.writeFileSync(structuredOutputPath, JSON.stringify(structuredOutput, null, 2));
 
     console.log(`💾 Rendered artifacts saved to ${artifactsDir}`);
@@ -541,40 +543,17 @@ async function main() {
       console.log('⏭️  Skipping email delivery (preflight check failed).');
     }
 
+    const mobileBody = status.email.ok ? successMsg : partialMsg;
+
     console.log('\n📱 Proceeding to mobile delivery regardless of email status...');
-    const whatsappStatus = runOpenclawMessage('whatsapp', addressCfg.phoneWhatsapp, whatsappBody);
+    const whatsappStatus = runOpenclawMessage('whatsapp', addressCfg.phoneWhatsapp, mobileBody);
+    const telegramStatus = runOpenclawMessage('telegram', addressCfg.telegramChatId, mobileBody);
 
-    // Telegram has a 4096-char limit — chunk on section separators if needed
-    const TELEGRAM_LIMIT = 4096;
-    let telegramStatus: ChannelStatus;
-    if (telegramBody.length <= TELEGRAM_LIMIT) {
-      telegramStatus = runOpenclawMessage('telegram', addressCfg.telegramChatId, telegramBody);
-    } else {
-      console.log(`  📏 Telegram body ${telegramBody.length} chars > ${TELEGRAM_LIMIT} limit, sending in chunks...`);
-      const sections = telegramBody.split('\n\n———\n\n');
-      const chunks: string[] = [];
-      let current = '';
-      for (const section of sections) {
-        const candidate = current ? current + '\n\n———\n\n' + section : section;
-        if (candidate.length > TELEGRAM_LIMIT && current) {
-          chunks.push(current);
-          current = section;
-        } else {
-          current = candidate;
-        }
-      }
-      if (current) chunks.push(current);
+    if (whatsappStatus.ok) console.log('  ✅ WhatsApp message sent.');
+    else console.error('  ❌ WhatsApp delivery failed:', whatsappStatus.stderr || whatsappStatus.error);
 
-      telegramStatus = { ok: true };
-      for (let i = 0; i < chunks.length; i++) {
-        const chunkStatus = runOpenclawMessage('telegram', addressCfg.telegramChatId, chunks[i]);
-        if (!chunkStatus.ok) {
-          telegramStatus = chunkStatus;
-          break;
-        }
-      }
-      if (telegramStatus.ok) console.log(`  📨 Sent Telegram in ${chunks.length} chunks.`);
-    }
+    if (telegramStatus.ok) console.log('  ✅ Telegram message sent.');
+    else console.error('  ❌ Telegram delivery failed:', telegramStatus.stderr || telegramStatus.error);
 
     if (whatsappStatus.ok) console.log('  ✅ WhatsApp message sent.');
     else console.error('  ❌ WhatsApp delivery failed:', whatsappStatus.stderr || whatsappStatus.error);

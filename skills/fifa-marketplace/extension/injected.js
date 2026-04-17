@@ -26,7 +26,7 @@
     } catch {}
   }
 
-  // ── fetch wrapper: passive observation only ─────────────────────────
+  // ── fetch wrapper: capture headers + relay organic tiles ────────────
   window.fetch = async function (...args) {
     const url = typeof args[0] === "string" ? args[0] : (args[0] && args[0].url) || "";
     if (url.includes(TILE_PATH)) {
@@ -41,7 +41,17 @@
         }
       }
     }
-    return originalFetch.apply(this, args);
+    const response = await originalFetch.apply(this, args);
+    if (url.includes(TILE_PATH)) {
+      response.clone().json().then((data) => {
+        if (data && typeof data.url === "string" && data.url.includes("captcha-delivery")) {
+          window.dispatchEvent(new CustomEvent("__fifaTileCaptcha", { detail: { url, bbox: new URL(url, location.origin).searchParams.get("bbox") } }));
+          return;
+        }
+        window.dispatchEvent(new CustomEvent("__fifaTileCapture", { detail: { url, data } }));
+      }).catch(() => {});
+    }
+    return response;
   };
 
   // ── XHR wrapper: header + productId capture ─────────────────────────
@@ -68,6 +78,16 @@
         capturedHeaders = { ...this.__fifaHeaders };
         console.log("[fifa-tile] captured XHR headers:", Object.keys(capturedHeaders).join(","));
       }
+      this.addEventListener("load", () => {
+        try {
+          const data = JSON.parse(this.responseText);
+          if (data && typeof data.url === "string" && data.url.includes("captcha-delivery")) {
+            window.dispatchEvent(new CustomEvent("__fifaTileCaptcha", { detail: { url, bbox: new URL(url, location.origin).searchParams.get("bbox") } }));
+            return;
+          }
+          window.dispatchEvent(new CustomEvent("__fifaTileCapture", { detail: { url, data } }));
+        } catch {}
+      });
     }
     return OrigSend.apply(this, args);
   };

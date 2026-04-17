@@ -41,6 +41,22 @@ let waitingForLoad = false;
 let matchesThisSession = 0;
 let nextBreakAt = 10;
 
+// Reason reported by the most recent scan (set via AUTOPAN_STATUS done).
+let lastScanReason = null;
+// Count of consecutive rate-limited scans — escalates cool-down.
+let consecutiveRateLimited = 0;
+
+// Proactive reset ritual: visit the events list + date pages every N matches
+// to refresh the Datadome session before it gets suspicious.
+let matchesSinceReset = 0;
+function randomResetEvery() { return 4 + Math.floor(Math.random() * 3); } // 4-6
+let nextResetAt = randomResetEvery();
+
+const RESET_URLS = [
+  `${RESALE_BASE}/secured/list/events`,
+  `${RESALE_BASE}/secured/selection/event/date?productId=10229225515651`,
+];
+
 function addLog(msg) {
   const line = `${new Date().toLocaleTimeString()} ${msg}`;
   logBuffer.push(line);
@@ -78,7 +94,7 @@ function skewedDelay(minMs, maxMs) {
   return minMs + Math.pow(Math.random(), 1.5) * (maxMs - minMs);
 }
 
-async function recordCompletion(match) {
+async function recordCompletion(match, reason) {
   try {
     await fetch(COMPLETE_URL, {
       method: "POST",
@@ -86,6 +102,7 @@ async function recordCompletion(match) {
       body: JSON.stringify({
         performance_id: match.performance_id,
         match_code: match.match_code,
+        reason: reason || "done",
       }),
     });
   } catch (e) {
@@ -104,6 +121,48 @@ function broadcastCycleState() {
     current: cycleQueue[cycleIndex]?.match_code || null,
     stats,
   }).catch(() => {});
+}
+
+async function navigateTabAndWait(tabId, url, timeoutMs = 20000) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (ok) => {
+      if (settled) return;
+      settled = true;
+      chrome.tabs.onUpdated.removeListener(listener);
+      resolve(ok);
+    };
+    const listener = (updatedTabId, changeInfo) => {
+      if (updatedTabId !== tabId) return;
+      if (changeInfo.status === "complete") done(true);
+    };
+    chrome.tabs.onUpdated.addListener(listener);
+    chrome.tabs.update(tabId, { url, active: true }).catch(() => done(false));
+    setTimeout(() => done(false), timeoutMs);
+  });
+}
+
+async function performResetRitual(trigger) {
+  if (!cycleTabId) {
+    // Find or open a FIFA tab to run the ritual on
+    const tabs = await chrome.tabs.query({ url: `${RESALE_BASE}/*` });
+    if (tabs.length > 0) cycleTabId = tabs[0].id;
+    else {
+      const tab = await chrome.tabs.create({ url: RESET_URLS[0], active: true });
+      cycleTabId = tab.id;
+    }
+  }
+  addLog(`Reset ritual (${trigger}): refreshing Datadome session...`);
+  for (let i = 0; i < RESET_URLS.length; i++) {
+    if (!cycleActive) return;
+    const ok = await navigateTabAndWait(cycleTabId, RESET_URLS[i]);
+    addLog(`  Reset step ${i + 1}/${RESET_URLS.length}: ${ok ? "loaded" : "timeout"}`);
+    // Dwell on the page for 3-6s — mimics a human browsing
+    await new Promise(r => setTimeout(r, 3000 + Math.random() * 3000));
+  }
+  matchesSinceReset = 0;
+  nextResetAt = randomResetEvery();
+  addLog(`Reset complete. Next proactive reset after ${nextResetAt} matches.`);
 }
 
 async function navigateToMatch(match) {
@@ -144,8 +203,9 @@ async function advanceCycle() {
   // Record the match we just finished
   const justDone = cycleQueue[cycleIndex];
   if (justDone) {
-    await recordCompletion(justDone);
+    await recordCompletion(justDone, lastScanReason);
     matchesThisSession++;
+    matchesSinceReset++;
   }
 
   cycleIndex++;
@@ -160,6 +220,26 @@ async function advanceCycle() {
 
   broadcastCycleState();
 
+  // Rate-limit handling: short cool-down + reset ritual. Escalates cool-down
+  // on consecutive blocks (30s, 60s, 120s cap), then refreshes the session.
+  if (lastScanReason === "rate_limited") {
+    consecutiveRateLimited++;
+    const coolMs = Math.min(30000 * Math.pow(2, consecutiveRateLimited - 1), 120000);
+    const jitterMs = coolMs + Math.random() * 10000;
+    addLog(`Flagged (${consecutiveRateLimited}× consecutive) — cooling down ${Math.round(jitterMs / 1000)}s then resetting...`);
+    await new Promise(r => setTimeout(r, jitterMs));
+    if (!cycleActive) return;
+    await performResetRitual("flagged");
+    if (!cycleActive) return;
+  } else {
+    consecutiveRateLimited = 0;
+    // Proactive reset every N matches to keep Datadome happy.
+    if (matchesSinceReset >= nextResetAt) {
+      await performResetRitual("proactive");
+      if (!cycleActive) return;
+    }
+  }
+
   // Session break check
   if (matchesThisSession >= nextBreakAt) {
     const breakMs = 60000 + Math.random() * 30000; // 60-90s
@@ -170,8 +250,8 @@ async function advanceCycle() {
     if (!cycleActive) return;
   }
 
-  // Between-match pause: skewed distribution, mostly 4-10s, occasionally up to 18s
-  const betweenMs = skewedDelay(4000, 18000);
+  // Between-match pause: skewed distribution, mostly 10-20s, occasionally up to 30s
+  const betweenMs = skewedDelay(10000, 30000);
   addLog(`Pausing ${(betweenMs / 1000).toFixed(1)}s before next match (${cycleIndex + 1}/${cycleQueue.length})...`);
   await new Promise(r => setTimeout(r, betweenMs));
 
@@ -217,6 +297,10 @@ async function startCycleWithFilter(matches) {
   cycleTabId  = null;
   matchesThisSession = 0;
   nextBreakAt = randomBreakAfter();
+  matchesSinceReset = 0;
+  nextResetAt = randomResetEvery();
+  consecutiveRateLimited = 0;
+  lastScanReason = null;
   stats = { tiles: 0, seats: 0, errors: 0 };
   addLog(`Starting cycle: ${matches.length} matches (shuffled, break after ~${nextBreakAt})`);
   broadcastCycleState();
@@ -261,9 +345,10 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 
   // ── Autopan status from content script ──
   if (msg.type === "AUTOPAN_STATUS") {
-    addLog(`Autopan: ${msg.status}`);
+    addLog(`Autopan: ${msg.status}${msg.reason ? ` (${msg.reason})` : ""}`);
     chrome.runtime.sendMessage({ type: "AUTOPAN_STATUS", status: msg.status, stats }).catch(() => {});
     if (msg.status === "done") {
+      lastScanReason = msg.reason || "done";
       if (cycleActive) advanceCycle();
     } else if (msg.status === "stopped") {
       if (!cycleActive) broadcastCycleState();
