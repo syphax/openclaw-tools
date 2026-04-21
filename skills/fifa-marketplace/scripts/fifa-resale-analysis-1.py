@@ -18,6 +18,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+from scipy.stats import gaussian_kde
 
 try:
     from IPython.display import display
@@ -113,7 +114,7 @@ display(df_cnts_by_latest_dt)
 # %%
 # Review a single match
 
-match = "M30"
+match = "M18"
 
 print(f"Reviewing match: {match}")
 
@@ -150,6 +151,7 @@ df_all_xtab = df_all_by_pull.reset_index().pivot(index="Match ID", columns="Pull
 
 display(df_all_xtab)
 # %%
+# Save cross-tab
 
 df_all_xtab.to_csv(DATA_DIR / f"fifa-resale-tickets-daily-xtab-{dt}.csv")
 
@@ -176,6 +178,29 @@ df_seat_churn = pd.DataFrame({
 }, index=both).sort_index()
 
 display(df_seat_churn)
+
+# %%
+# Data coverage: which dates does each match have data for?
+
+match_dates = (df_tix_daily.groupby("Match ID")["Pull Date"]
+               .apply(set).to_dict())
+
+coverage_records = []
+for match_id in sorted(match_dates.keys()):
+    dates_set = match_dates[match_id]
+    all_dates_sorted = sorted(dates_set)
+    pairs = sum(1 for i in range(len(all_dates_sorted) - 1)
+                if (pd.to_datetime(all_dates_sorted[i + 1])
+                    - pd.to_datetime(all_dates_sorted[i])).days == 1)
+    coverage_records.append({
+        "Match": f"M{match_id}",
+        "Snapshot Dates": len(dates_set),
+        "Consecutive Pairs": pairs,
+        "Last Snapshot": max(dates_set),
+    })
+
+df_coverage = pd.DataFrame(coverage_records).sort_values("Match")
+display(df_coverage)
 
 # %%
 # Save seat churn
@@ -218,6 +243,12 @@ FLAG_HISTOS = False
 
 FLAG_LINES = True
 
+FLAG_RIDGELINES = True
+RIDGELINE_GROUP = "sold"  # "sold", "stayed", or "added"
+
+FLAG_BOXPLOTS = True
+BOXPLOT_GROUP = "sold"  # "sold", "stayed", or "added"
+
 # %%
 # Setup
 
@@ -227,6 +258,11 @@ end_date = pd.to_datetime(datetime.datetime.now().date())
 # 1. Create a range of dates from start to (end - 1 day)
 # 'D' frequency ensures we hit every single day
 date_list = pd.date_range(start=start_date, end=end_date - pd.Timedelta(days=1), freq='D')
+
+# DATE_B strings for consistent chart axes (one per date pair)
+all_date_strs = [(d + pd.Timedelta(days=1)).strftime('%Y-%m-%d') for d in date_list]
+
+# %%
 
 for DATE_A in date_list:
     # 2. Assign DATE_B as exactly one day after DATE_A
@@ -246,6 +282,10 @@ for DATE_A in date_list:
 
     for match_id in list_matches:
         match_str = f"M{match_id}"
+        # Skip if match doesn't have data for both dates
+        m_dates = match_dates.get(match_id, set())
+        if str_a not in m_dates or str_b not in m_dates:
+            continue
         for cat in list_categories:
             mask_a = (snap_a["Match"] == match_str) & (snap_a["Category"] == cat)
             mask_b = (snap_b["Match"] == match_str) & (snap_b["Category"] == cat)
@@ -328,6 +368,11 @@ if FLAG_LINES:
             snap_a = df_tix_daily[df_tix_daily["Pull Date"] == str_a].set_index("seat_key")
             snap_b = df_tix_daily[df_tix_daily["Pull Date"] == str_b].set_index("seat_key")
 
+            # Skip if match doesn't have data for both dates
+            m_dates = match_dates.get(match_id, set())
+            if str_a not in m_dates or str_b not in m_dates:
+                continue
+
             for cat in list_line_categories:
                 mask_a = (snap_a["Match"] == match_str) & (snap_a["Category"] == cat)
                 mask_b = (snap_b["Match"] == match_str) & (snap_b["Category"] == cat)
@@ -369,7 +414,220 @@ if FLAG_LINES:
         ax.set_ylabel("Price")
         ax.legend(fontsize=9)
         ax.grid(True, alpha=0.3)
-        fig.autofmt_xdate()
+        # Consistent date axis showing all dates in range
+        all_date_vals = [pd.to_datetime(d).date() for d in all_date_strs]
+        ax.set_xticks(all_date_vals)
+        ax.set_xticklabels([d[5:] for d in all_date_strs], rotation=45, ha="right", fontsize=8)
+        plt.tight_layout()
+        plt.show()
+
+# %%
+# Ridgeline charts: price distributions over time
+
+if FLAG_RIDGELINES:
+
+    ridgeline_group_labels = {
+        "sold":   "Sold/Removed",
+        "stayed": "Stayed",
+        "added":  "Added",
+    }
+    ridgeline_label = ridgeline_group_labels[RIDGELINE_GROUP]
+
+    for match_id in list_matches:
+        match_str = f"M{match_id}"
+
+        # Collect price series per (date, category)
+        price_data = {}  # (cat, date_str) -> Series of prices
+        for DATE_A in date_list:
+            DATE_B = DATE_A + pd.Timedelta(days=1)
+            str_a = DATE_A.strftime('%Y-%m-%d')
+            str_b = DATE_B.strftime('%Y-%m-%d')
+
+            snap_a = df_tix_daily[df_tix_daily["Pull Date"] == str_a].set_index("seat_key")
+            snap_b = df_tix_daily[df_tix_daily["Pull Date"] == str_b].set_index("seat_key")
+
+            # Skip if match doesn't have data for both dates
+            m_dates = match_dates.get(match_id, set())
+            if str_a not in m_dates or str_b not in m_dates:
+                continue
+
+            for cat in list_line_categories:
+                mask_a = (snap_a["Match"] == match_str) & (snap_a["Category"] == cat)
+                mask_b = (snap_b["Match"] == match_str) & (snap_b["Category"] == cat)
+                keys_a = set(snap_a[mask_a].index)
+                keys_b = set(snap_b[mask_b].index)
+
+                if RIDGELINE_GROUP == "sold":
+                    target_keys = keys_a - keys_b
+                    prices = snap_a.loc[snap_a.index.isin(target_keys) & mask_a, "Price"]
+                elif RIDGELINE_GROUP == "stayed":
+                    target_keys = keys_a & keys_b
+                    prices = snap_b.loc[snap_b.index.isin(target_keys) & mask_b, "Price"]
+                else:  # "added"
+                    target_keys = keys_b - keys_a
+                    prices = snap_b.loc[snap_b.index.isin(target_keys) & mask_b, "Price"]
+
+                if len(prices) >= 2:
+                    price_data[(cat, str_b)] = prices
+
+        if not price_data:
+            print(f"No {ridgeline_label} data for {match_str} — skipping ridgeline.")
+            continue
+
+        # Determine shared x-axis range across all categories
+        all_prices = pd.concat(price_data.values())
+        x_min = all_prices.quantile(0.0)
+        x_max = all_prices.quantile(0.95)
+        x_grid = np.linspace(x_min, x_max, 300)
+
+        # Use full date range for consistent axis (gaps where data is missing)
+        all_dates = all_date_strs
+
+        n_cats = len(list_line_categories)
+        fig, axes = plt.subplots(n_cats, 1, figsize=(12, 4 * n_cats), squeeze=False)
+        fig.suptitle(f"{match_str} — {ridgeline_label} Price Distributions", fontsize=14, y=1.01)
+
+        for ax_idx, cat in enumerate(list_line_categories):
+            ax = axes[ax_idx, 0]
+            color = cat_colors.get(cat, "gray")
+
+            dates_with_data = [d for d in all_dates if (cat, d) in price_data]
+            if not dates_with_data:
+                ax.set_title(f"{cat} — no data", fontsize=11)
+                continue
+
+            # Compute KDEs and find max density for scaling
+            kdes = {}
+            for d in dates_with_data:
+                prices = price_data[(cat, d)].clip(upper=x_max)
+                try:
+                    kde = gaussian_kde(prices)
+                    kdes[d] = kde(x_grid)
+                except np.linalg.LinAlgError:
+                    continue
+
+            if not kdes:
+                ax.set_title(f"{cat} — KDE failed", fontsize=11)
+                continue
+
+            max_density = max(k.max() for k in kdes.values())
+            overlap = 0.7
+            scale = overlap / max_density if max_density > 0 else 1
+
+            for i, d in enumerate(all_dates):
+                if d not in kdes:
+                    continue
+                y_offset = i
+                density = kdes[d] * scale
+                ax.fill_between(x_grid, y_offset, y_offset + density,
+                                alpha=0.5, color=color, edgecolor=color, linewidth=0.8)
+                ax.plot(x_grid, y_offset + density, color=color, linewidth=0.8)
+
+            ax.set_yticks(range(len(all_dates)))
+            ax.set_yticklabels([d[5:] for d in all_dates], fontsize=8)
+            ax.set_xlim(x_min, x_max)
+            ax.set_ylim(-0.2, len(all_dates) - 1 + 1.2)
+            ax.set_title(f"{cat}", fontsize=11)
+            ax.set_xlabel("Price")
+
+        plt.tight_layout()
+        plt.show()
+
+# %%
+# Boxplots: price distributions over time
+
+if FLAG_BOXPLOTS:
+
+    boxplot_group_labels = {
+        "sold":   "Sold/Removed",
+        "stayed": "Stayed",
+        "added":  "Added",
+    }
+    boxplot_label = boxplot_group_labels[BOXPLOT_GROUP]
+
+    for match_id in list_matches:
+        match_str = f"M{match_id}"
+
+        # Collect price series per (date, category)
+        price_data = {}  # (cat, date_str) -> Series of prices
+        for DATE_A in date_list:
+            DATE_B = DATE_A + pd.Timedelta(days=1)
+            str_a = DATE_A.strftime('%Y-%m-%d')
+            str_b = DATE_B.strftime('%Y-%m-%d')
+
+            snap_a = df_tix_daily[df_tix_daily["Pull Date"] == str_a].set_index("seat_key")
+            snap_b = df_tix_daily[df_tix_daily["Pull Date"] == str_b].set_index("seat_key")
+
+            # Skip if match doesn't have data for both dates
+            m_dates = match_dates.get(match_id, set())
+            if str_a not in m_dates or str_b not in m_dates:
+                continue
+
+            for cat in list_line_categories:
+                mask_a = (snap_a["Match"] == match_str) & (snap_a["Category"] == cat)
+                mask_b = (snap_b["Match"] == match_str) & (snap_b["Category"] == cat)
+                keys_a = set(snap_a[mask_a].index)
+                keys_b = set(snap_b[mask_b].index)
+
+                if BOXPLOT_GROUP == "sold":
+                    target_keys = keys_a - keys_b
+                    prices = snap_a.loc[snap_a.index.isin(target_keys) & mask_a, "Price"]
+                elif BOXPLOT_GROUP == "stayed":
+                    target_keys = keys_a & keys_b
+                    prices = snap_b.loc[snap_b.index.isin(target_keys) & mask_b, "Price"]
+                else:  # "added"
+                    target_keys = keys_b - keys_a
+                    prices = snap_b.loc[snap_b.index.isin(target_keys) & mask_b, "Price"]
+
+                if len(prices) >= 1:
+                    price_data[(cat, str_b)] = prices
+
+        if not price_data:
+            print(f"No {boxplot_label} data for {match_str} — skipping boxplot.")
+            continue
+
+        n_cats = len(list_line_categories)
+        fig, axes = plt.subplots(n_cats, 1, figsize=(14, 5 * n_cats), squeeze=False)
+        fig.suptitle(f"{match_str} — {boxplot_label} Price Distributions", fontsize=14)
+
+        for ax_idx, cat in enumerate(list_line_categories):
+            ax = axes[ax_idx, 0]
+            color = cat_colors.get(cat, "gray")
+
+            dates_with_data = sorted(d for c, d in price_data if c == cat)
+            if not dates_with_data:
+                ax.set_title(f"{cat} — no data", fontsize=11)
+                continue
+
+            # Plot boxes at positions matching the full date range
+            box_positions = [all_date_strs.index(d) for d in dates_with_data]
+            box_data = [price_data[(cat, d)].values for d in dates_with_data]
+            bp = ax.boxplot(box_data, positions=box_positions,
+                            patch_artist=True, widths=0.6,
+                            showfliers=True, flierprops=dict(marker='.', markersize=3, alpha=0.5))
+            for patch in bp['boxes']:
+                patch.set_facecolor(color)
+                patch.set_alpha(0.5)
+            for median in bp['medians']:
+                median.set_color('black')
+
+            all_cat_prices = np.concatenate(box_data)
+            y_max = np.median(all_cat_prices) * 3
+            ax.set_ylim(0, y_max)
+            # Consistent date axis with all dates; show counts where data exists
+            ax.set_xticks(range(len(all_date_strs)))
+            labels = []
+            for d in all_date_strs:
+                if (cat, d) in price_data:
+                    n = len(price_data[(cat, d)])
+                    labels.append(f"n={n}\n{d[5:]}")
+                else:
+                    labels.append(f"\n{d[5:]}")
+            ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=8)
+            ax.set_title(f"{cat}", fontsize=11)
+            ax.set_ylabel("Price")
+            ax.grid(True, axis='y', alpha=0.3)
+
         plt.tight_layout()
         plt.show()
 

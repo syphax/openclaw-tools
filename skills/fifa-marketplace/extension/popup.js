@@ -17,6 +17,7 @@ const receiverBadge = document.getElementById("receiver-badge");
 const autopanBadge  = document.getElementById("autopan-badge");
 
 let allMatches = [];
+let recentDoneSet = new Set();  // performance_ids done in last 6h
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -50,10 +51,15 @@ function setCycleButtons(running) {
 }
 
 function getSelectedMatches() {
-  return allMatches.filter((_, i) => {
-    const cb = document.getElementById(`match-cb-${i}`);
-    return cb && cb.checked;
-  });
+  return allMatches
+    .filter((_, i) => {
+      const cb = document.getElementById(`match-cb-${i}`);
+      return cb && cb.checked;
+    })
+    .map(m => ({
+      ...m,
+      force: recentDoneSet.has(m.performance_id),
+    }));
 }
 
 // ── Match list rendering ─────────────────────────────────────────────
@@ -155,6 +161,7 @@ async function loadMatches() {
       }
     } catch {}
 
+    recentDoneSet = new Set(Object.keys(recentDone));
     renderMatches(allMatches, null, recentDone);
     btnRunCycle.disabled = false;
     const doneCount = Object.keys(recentDone).length;

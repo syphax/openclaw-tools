@@ -268,6 +268,7 @@ async function startCycleWithFilter(matches) {
       const cutoff = Date.now() / 1000 - RECENT_CUTOFF_S;
       const before = matches.length;
       matches = matches.filter(m => {
+        if (m.force) return true;  // user explicitly re-selected
         const ts = completions[m.performance_id];
         return !ts || ts < cutoff;
       });

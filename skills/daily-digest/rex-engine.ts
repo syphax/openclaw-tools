@@ -16,8 +16,6 @@ import {
   type StructuredLlmOutput,
   validateStructuredOutput,
   renderEmailHtml,
-  renderWhatsAppText,
-  renderTelegramText,
   buildFallbackOutput,
 } from './digest-renderer.js';
 import { checkGmailAuth } from './gmail-auth-check.js';
@@ -64,6 +62,23 @@ interface ChannelStatus {
   error?: string;
   stdout?: string;
   stderr?: string;
+}
+
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function trimOneLine(text: string | undefined, maxLen = 120): string | undefined {
+  if (!text) return undefined;
+  const oneLine = text.replace(/\s+/g, ' ').trim();
+  return oneLine.length > maxLen ? `${oneLine.slice(0, maxLen - 1)}…` : oneLine;
+}
+
+function summarizeEmailFailure(status: ChannelStatus): string {
+  const haystack = `${status.stderr || ''}\n${status.error || ''}`;
+  if (/invalid_grant|expired or revoked|expired|revoked/i.test(haystack)) return 'Gmail auth failed';
+  if (/404\s*notFound|Requested entity was not found/i.test(haystack)) return 'Gmail sender configuration failed';
+  return trimOneLine(status.stderr) || trimOneLine(status.error) || 'unknown email error';
 }
 
 interface DeliveryStatus {
@@ -387,12 +402,26 @@ function runOpenclawMessage(channel: 'whatsapp' | 'telegram', target: string, bo
     { env: process.env },
   );
 
+  const signalNote = oc.signal ? `signal ${oc.signal}` : undefined;
   return {
     ok: oc.status === 0,
     stdout: oc.stdout?.toString(),
     stderr: oc.stderr?.toString(),
-    error: oc.status === 0 ? undefined : `openclaw message send failed (exit ${oc.status})`,
+    error: oc.status === 0 ? undefined : `openclaw message send failed (${signalNote || `exit ${oc.status}`})`,
   };
+}
+
+async function runOpenclawMessageWithRetry(channel: 'whatsapp' | 'telegram', target: string, body: string): Promise<ChannelStatus> {
+  let status = runOpenclawMessage(channel, target, body);
+  if (status.ok) return status;
+
+  const retryable = /exit null|signal|408|429|503|timed? out|temporar/i.test(`${status.error || ''}\n${status.stderr || ''}`);
+  if (!retryable) return status;
+
+  console.warn(`  ⚠️  ${channel} send failed, retrying once...`);
+  await sleep(1500);
+  status = runOpenclawMessage(channel, target, body);
+  return status;
 }
 
 function isWhatsAppListenerDown(status: ChannelStatus): boolean {
@@ -420,8 +449,6 @@ function deliverEmail(subject: string, htmlBody: string): ChannelStatus {
       'gmail',
       'send',
       '--account',
-      addressCfg.emailFrom,
-      '--from',
       addressCfg.emailFrom,
       '--to',
       addressCfg.emailTo,
@@ -520,7 +547,7 @@ async function main() {
     const now = new Date();
     const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
     const successMsg = `🦖 Rex: Daily digest created and sent to your email successfully at ${timeStr}.`;
-    const partialMsg = `🦖 Rex: Daily digest created at ${timeStr}, but email delivery failed. Check artifacts.`;
+    let partialMsg = `🦖 Rex: Daily digest created at ${timeStr}, but email delivery failed.`;
 
     console.log('\n📝 Content rendered.');
 
@@ -543,17 +570,15 @@ async function main() {
       console.log('⏭️  Skipping email delivery (preflight check failed).');
     }
 
+    if (!status.email.ok) {
+      partialMsg = `🦖 Rex: Daily digest created at ${timeStr}, but email delivery failed (${summarizeEmailFailure(status.email)}).`;
+    }
+
     const mobileBody = status.email.ok ? successMsg : partialMsg;
 
     console.log('\n📱 Proceeding to mobile delivery regardless of email status...');
-    const whatsappStatus = runOpenclawMessage('whatsapp', addressCfg.phoneWhatsapp, mobileBody);
-    const telegramStatus = runOpenclawMessage('telegram', addressCfg.telegramChatId, mobileBody);
-
-    if (whatsappStatus.ok) console.log('  ✅ WhatsApp message sent.');
-    else console.error('  ❌ WhatsApp delivery failed:', whatsappStatus.stderr || whatsappStatus.error);
-
-    if (telegramStatus.ok) console.log('  ✅ Telegram message sent.');
-    else console.error('  ❌ Telegram delivery failed:', telegramStatus.stderr || telegramStatus.error);
+    const whatsappStatus = await runOpenclawMessageWithRetry('whatsapp', addressCfg.phoneWhatsapp, mobileBody);
+    const telegramStatus = await runOpenclawMessageWithRetry('telegram', addressCfg.telegramChatId, mobileBody);
 
     if (whatsappStatus.ok) console.log('  ✅ WhatsApp message sent.');
     else console.error('  ❌ WhatsApp delivery failed:', whatsappStatus.stderr || whatsappStatus.error);
