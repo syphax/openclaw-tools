@@ -181,28 +181,28 @@ df_all_xtab.to_csv(DATA_DIR / f"fifa-resale-tickets-daily-xtab-{dt}.csv")
 # * How many seats existed in the 1st snapshot, but not the 2nd? (sold or removed)
 # * How many are listed in the 2nd snapshot, but not the 1st? (new or relisted)
 
-DATE_A = "2026-04-15"
-DATE_B = "2026-04-16"
+# DATE_A = "2026-04-15"
+# DATE_B = "2026-04-16"
 
-seats_a = df_tix_daily[df_tix_daily["Pull Date"] == DATE_A].groupby("Match")["seat_key"].apply(set)
-seats_b = df_tix_daily[df_tix_daily["Pull Date"] == DATE_B].groupby("Match")["seat_key"].apply(set)
+# seats_a = df_tix_daily[df_tix_daily["Pull Date"] == DATE_A].groupby("Match")["seat_key"].apply(set)
+# seats_b = df_tix_daily[df_tix_daily["Pull Date"] == DATE_B].groupby("Match")["seat_key"].apply(set)
 
-both = seats_a.index.intersection(seats_b.index)
+# both = seats_a.index.intersection(seats_b.index)
 
-df_seat_churn = pd.DataFrame({
-    "sold_or_removed": [len(seats_a[m] - seats_b[m]) for m in both],
-    "new_or_relisted":  [len(seats_b[m] - seats_a[m]) for m in both],
-    "in_both":          [len(seats_a[m] & seats_b[m]) for m in both],
-    f"cnt_{DATE_A}":         [len(seats_a[m]) for m in both],
-    f"cnt_{DATE_B}":         [len(seats_b[m]) for m in both],
-}, index=both).sort_index()
+# df_seat_churn = pd.DataFrame({
+#     "sold_or_removed": [len(seats_a[m] - seats_b[m]) for m in both],
+#     "new_or_relisted":  [len(seats_b[m] - seats_a[m]) for m in both],
+#     "in_both":          [len(seats_a[m] & seats_b[m]) for m in both],
+#     f"cnt_{DATE_A}":         [len(seats_a[m]) for m in both],
+#     f"cnt_{DATE_B}":         [len(seats_b[m]) for m in both],
+# }, index=both).sort_index()
 
-display(df_seat_churn)
+# display(df_seat_churn)
 
-# %%
-# Save seat churn
+# # %%
+# # Save seat churn
 
-df_seat_churn.to_csv(DATA_DIR / f"fifa-resale-tickets-seat-churn-{dt}.csv")   
+# df_seat_churn.to_csv(DATA_DIR / f"fifa-resale-tickets-seat-churn-{dt}.csv")   
 
 # %%
 # Data coverage: which dates does each match have data for?
@@ -274,6 +274,9 @@ BOXPLOT_GROUPS = ["sold", 'stayed', "added"]  # any of "sold", "stayed", "added"
 # When True, compare each date only to the next calendar day (skip pair if gap > 1).
 # When False, compare each date to the most recent prior date with data (gap may exceed 1).
 FLAG_FORCE_DOD = True
+FLAG_FORCE_DOD = False
+
+dod_tag = "dod" if FLAG_FORCE_DOD else "vd"
 
 # %%
 # Setup
@@ -467,7 +470,7 @@ if FLAG_LINES:
         plt.show()
         
         if FLAG_SAVE_IMG:
-            fig.savefig(IMG_DIR / f"{match_str}_sold_removed_trends.png", dpi=300)
+            fig.savefig(IMG_DIR / f"{match_str}_sold_removed_{dod_tag}_trends.png", dpi=300)
 
 # %%
 # Ridgeline charts: price distributions over time
@@ -578,7 +581,7 @@ if FLAG_RIDGELINES:
             plt.show()
             
             if FLAG_SAVE_IMG:
-                fig.savefig(IMG_DIR / f"{match_str}_{ridgeline_group}_ridgeline.png", dpi=300)
+                fig.savefig(IMG_DIR / f"{match_str}_{ridgeline_group}_{dod_tag}_ridgeline.png", dpi=300)
             
 
 # %%
@@ -680,9 +683,10 @@ if FLAG_BOXPLOTS:
             
             if FLAG_SAVE_IMG:
                 print(f"Saving boxplot for {match_str} / {boxplot_label}...")
-                fig.savefig(IMG_DIR / f"{match_str}_{boxplot_group}_boxplot.png", dpi=300)  
+                fig.savefig(IMG_DIR / f"{match_str}_{boxplot_group}_{dod_tag}_boxplot.png", dpi=300)  
 
 # %%
+# End
 
 t1 = datetime.datetime.now()
 
