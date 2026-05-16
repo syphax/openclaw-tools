@@ -250,6 +250,14 @@ async function advanceCycle() {
     if (!cycleActive) return;
   }
 
+  // Every 2 matches, take a longer breathing pause to avoid bot detection
+  if (matchesThisSession > 0 && matchesThisSession % 2 === 0) {
+    const breathMs = skewedDelay(45000, 75000); // 45-75s
+    addLog(`Breathing pause: ${(breathMs / 1000).toFixed(1)}s after ${matchesThisSession} matches...`);
+    await new Promise(r => setTimeout(r, breathMs));
+    if (!cycleActive) return;
+  }
+
   // Between-match pause: skewed distribution, mostly 10-20s, occasionally up to 30s
   const betweenMs = skewedDelay(10000, 30000);
   addLog(`Pausing ${(betweenMs / 1000).toFixed(1)}s before next match (${cycleIndex + 1}/${cycleQueue.length})...`);

@@ -116,6 +116,34 @@ export async function getDistinctProjects(): Promise<string[]> {
   return rows.map(r => (r as any).project);
 }
 
+export async function insertManualSession(
+  task: string,
+  project: string,
+  date: string,
+  work_minutes: number,
+  cycle_minutes: number,
+): Promise<number> {
+  const started_at = new Date(`${date}T00:00:00`);
+  const work_end_at = new Date(started_at.getTime() + work_minutes * 60_000);
+  const cycle_end_at = new Date(started_at.getTime() + cycle_minutes * 60_000);
+
+  const result = await db.all(`
+    INSERT INTO sessions (task, project, started_at, work_end_at, cycle_end_at, stopped_at, status, origin, work_minutes, cycle_minutes)
+    VALUES (?, ?, ?, ?, ?, ?, 'completed', 'manual', ?, ?)
+    RETURNING id
+  `, task, project, started_at.toISOString(), work_end_at.toISOString(), cycle_end_at.toISOString(),
+     work_end_at.toISOString(), work_minutes, cycle_minutes);
+  return (result[0] as any).id;
+}
+
+export async function deleteProject(projectName: string): Promise<number> {
+  const result = await db.all(
+    `UPDATE sessions SET project = 'General' WHERE project = ? RETURNING id`,
+    projectName,
+  );
+  return result.length;
+}
+
 function mapRow(row: any): Session {
   return {
     id: row.id,

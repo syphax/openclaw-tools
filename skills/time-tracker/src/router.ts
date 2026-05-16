@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { startTimer, stopTimer, pauseTimer, resumeTimer, extendTimer, getStatus } from './timer.js';
-import { getRecentSessions, getWorkTimeByProject, getDistinctProjects } from './db.js';
+import { getRecentSessions, getWorkTimeByProject, getDistinctProjects, insertManualSession, deleteProject } from './db.js';
 import type { Config } from './types.js';
 import fs from 'fs';
 import path from 'path';
@@ -139,6 +139,45 @@ export function createRouter(): Router {
   router.get('/projects', async (_req, res) => {
     const projects = await getDistinctProjects();
     res.json(projects);
+  });
+
+  // Add a manual (past) session
+  router.post('/sessions/manual', async (req, res) => {
+    try {
+      const {
+        task = config.defaults.task,
+        project = config.defaults.project,
+        date,
+        work = config.defaults.work_minutes,
+        cycle,
+      } = req.body || {};
+
+      if (!date) {
+        res.status(400).json({ ok: false, error: 'date is required (YYYY-MM-DD)' });
+        return;
+      }
+
+      const cycleMinutes = cycle ?? work + (config.defaults.cycle_minutes - config.defaults.work_minutes);
+      const id = await insertManualSession(task, project, date, work, cycleMinutes);
+      res.json({ ok: true, id });
+    } catch (err: any) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // Delete a project (reassign sessions to "General")
+  router.delete('/projects/:name', async (req, res) => {
+    try {
+      const projectName = decodeURIComponent(req.params.name);
+      if (projectName === 'General') {
+        res.status(400).json({ ok: false, error: 'Cannot delete the General project' });
+        return;
+      }
+      const updated = await deleteProject(projectName);
+      res.json({ ok: true, updated });
+    } catch (err: any) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
   });
 
   // Get config defaults (for frontend form pre-fill)

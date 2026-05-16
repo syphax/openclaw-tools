@@ -81,7 +81,9 @@ function renderMatches(matches, currentPerfId = null, recentDone = {}) {
     cb.type = "checkbox";
     cb.id = `match-cb-${i}`;
     // Uncheck if done in last 6h or sold out; user can re-check manually
-    cb.checked = !isDone && m.availability !== "sold_out";
+    // TEMPORARY: auto-deselect Toronto matches (new resale rules cause errors)
+    const isToronto = (m.location || "").toLowerCase().includes("toronto");
+    cb.checked = !isDone && m.availability !== "sold_out" && !isToronto;
 
     const code = document.createElement("span");
     code.className = "match-code";

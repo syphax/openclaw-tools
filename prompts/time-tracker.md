@@ -56,3 +56,11 @@ The app stores data in a DuckDB database at `~/.openclaw/data/time-tracker/`.
 Backlog:
 
 * Delete projects / tasks
+
+## More Enhancements
+
+I want to add a tab to the web UI. This tab has the title UTILITIES
+
+On this tab, I want to:
+- Be able to add a log of time for some time in the past, similar to the -m flag described above. I also want to implement the -m flag
+- Be able to delete Project Names. Any time logged under any Project that is deleted gets reverted to "General". There should be an "Are you sure?" dialog before deleting.

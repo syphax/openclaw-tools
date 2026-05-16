@@ -63,6 +63,26 @@ export async function getProjects(): Promise<string[]> {
   return json('/projects')
 }
 
+export async function addManualSession(opts: {
+  task?: string
+  project?: string
+  date: string
+  work?: number
+  cycle?: number
+}): Promise<{ ok: boolean; id: number }> {
+  return json('/sessions/manual', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(opts),
+  })
+}
+
+export async function deleteProject(name: string): Promise<{ ok: boolean; updated: number }> {
+  return json(`/projects/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+  })
+}
+
 export async function getDefaults(): Promise<{
   work_minutes: number
   cycle_minutes: number

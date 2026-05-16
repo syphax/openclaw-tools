@@ -237,6 +237,9 @@ yarn-error.log*
 */logs/*.txt
 */data/*.txt
 
+# Images
+img/
+
 # Specific files to ignore
 skills/world-cup-tickets/ticket-price-history.csv
 skills/world-cup-tickets/logs/daily-415-summary.json
