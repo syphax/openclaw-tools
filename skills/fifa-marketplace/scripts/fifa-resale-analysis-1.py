@@ -685,6 +685,86 @@ if FLAG_BOXPLOTS:
                 print(f"Saving boxplot for {match_str} / {boxplot_label}...")
                 fig.savefig(IMG_DIR / f"{match_str}_{boxplot_group}_{dod_tag}_boxplot.png", dpi=300)  
 
+
+# %%
+# Simple plots
+
+list_matches = [42, 74]
+
+list_categories = ["Category 1"]
+
+# Prompt:
+#
+# For each match in list_matches, and each category in list_categories, 
+# I want a simple chart that shows:
+# Top subplot: # of tickets available in that category per day (across sold, added, stayed)
+# Bottom subplot: 5th perceentile of ticket prices in that category per day (across sold, added, stayed)
+
+FLAG_SIMPLE = True
+
+P5 = 0.05  # percentile for the bottom subplot
+
+if FLAG_SIMPLE:
+
+    cat_colors = {
+        "Category 1": "orange",
+        "Category 2": "crimson",
+        "Category 3": "royalblue",
+        "Category 4": "green",
+    }
+
+    # Full date axis shared across matches/categories
+    all_date_vals = [pd.to_datetime(d).date() for d in all_date_strs]
+
+    for match_id in list_matches:
+        match_str = f"M{match_id}"
+
+        for cat in list_categories:
+            color = cat_colors.get(cat, "gray")
+
+            # Every ticket present in each day's snapshot (across sold/added/stayed)
+            sub = df_tix_daily[(df_tix_daily["Match"] == match_str) &
+                               (df_tix_daily["Category"] == cat)]
+            if sub.empty:
+                print(f"No data for {match_str} / {cat} — skipping simple plot.")
+                continue
+
+            daily = sub.groupby("Pull Date").agg(
+                count=("seat_key", "nunique"),
+                p5=("Price", lambda s: s.quantile(P5)),
+            )
+
+            # Align to the full date axis; np.nan leaves gaps where no snapshot exists
+            counts = [daily["count"].get(d, np.nan) for d in all_date_strs]
+            p5s    = [daily["p5"].get(d, np.nan) for d in all_date_strs]
+
+            fig, (ax_top, ax_bot) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+            fig.suptitle(f"{match_str} — {cat}", fontsize=13)
+
+            ax_top.plot(all_date_vals, counts, color=color, marker="o", markersize=4)
+            ax_top.set_ylabel("Tickets available")
+            ax_top.set_title("Tickets available per day", fontsize=11)
+            ax_top.grid(True, alpha=0.3)
+
+            ax_bot.plot(all_date_vals, p5s, color=color, marker="o", markersize=4)
+            ax_bot.set_ylabel(f"Price (p{int(P5 * 100)})")
+            ax_bot.set_title(f"{int(P5 * 100)}th-percentile price per day", fontsize=11)
+            ax_bot.set_xlabel("Date")
+            ax_bot.grid(True, alpha=0.3)
+
+            ax_bot.set_xticks(all_date_vals)
+            ax_bot.set_xticklabels([d[5:] for d in all_date_strs],
+                                   rotation=45, ha="right", fontsize=8)
+
+            plt.tight_layout()
+            plt.show()
+
+            if FLAG_SAVE_IMG:
+                cat_tag = cat.replace(" ", "")
+                print(f"Saving simple plot for {match_str} / {cat}...")
+                fig.savefig(IMG_DIR / f"{match_str}_{cat_tag}_simple.png", dpi=300)
+
+
 # %%
 # End
 
